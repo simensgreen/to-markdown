@@ -1,26 +1,64 @@
 {
   "name": "@cognipeer/to-markdown",
-  "version": "1.0.1",
-  "main": "src/index.js",
+  "version": "2.0.0",
+  "description": "A versatile utility library for converting various file formats to Markdown. Now with TypeScript support!",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "rollup -c",
+    "build": "npm run clean && npm run build:ts && npm run build:rollup",
+    "build:ts": "tsc",
+    "build:rollup": "rollup -c",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prepublishOnly": "npm i && npm run build",
+    "docs:dev": "cd docs && bundle exec jekyll serve",
+    "docs:build": "cd docs && bundle exec jekyll build",
     "publish-private": "npm publish",
     "publish-public": "npm publish --access public"
   },
+  "keywords": [
+    "markdown",
+    "converter",
+    "pdf",
+    "docx",
+    "html",
+    "excel",
+    "csv",
+    "jupyter",
+    "to-markdown",
+    "file-converter",
+    "typescript"
+  ],
   "author": "Cognipeer",
   "license": "MIT",
-  "description": "A versatile utility library for converting various file formats to Markdown.",
   "repository": {
     "type": "git",
     "url": "https://github.com/Cognipeer/to-markdown.git"
   },
-  "type": "module",
-  "exports": {
-    "import": "./src/index.js",
-    "require": "./src/index.cjs"
+  "bugs": {
+    "url": "https://github.com/Cognipeer/to-markdown/issues"
   },
+  "homepage": "https://cognipeer.github.io/to-markdown",
   "dependencies": {
     "@opendocsg/pdf2md": "^0.2.1",
     "adm-zip": "^0.5.16",
@@ -39,6 +77,19 @@
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
-    "rollup": "^4.39.0"
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@types/adm-zip": "^0.5.5",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^22.10.5",
+    "@types/papaparse": "^5.3.15",
+    "@types/turndown": "^5.0.5",
+    "@types/xml2js": "^0.4.14",
+    "rollup": "^4.39.0",
+    "tslib": "^2.8.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
