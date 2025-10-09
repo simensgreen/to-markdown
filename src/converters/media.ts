@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import sizeOf from 'image-size';
 import { parseBuffer } from 'music-metadata';
 import { formatMarkdown } from '../utils/markdown.js';
 import type { ImageMetadata, AudioMetadata } from '../types/index.js';
@@ -14,17 +14,16 @@ export async function convertImageToMarkdown(
   ext: string
 ): Promise<string> {
   try {
-    const image = sharp(buffer);
-    const metadata = await image.metadata();
+    const dimensions = sizeOf(buffer);
 
     let md = '';
 
-    if (metadata.width && metadata.height) {
-      md += `ImageSize: ${metadata.width}x${metadata.height}\n`;
+    if (dimensions.width && dimensions.height) {
+      md += `ImageSize: ${dimensions.width}x${dimensions.height}\n`;
     }
 
-    if (metadata.format) {
-      md += `Format: ${metadata.format}\n`;
+    if (dimensions.type) {
+      md += `Format: ${dimensions.type}\n`;
     }
 
     // TODO: Add OCR for image text extraction

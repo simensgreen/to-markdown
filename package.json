@@ -1,6 +1,6 @@
 {
   "name": "@cognipeer/to-markdown",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A versatile utility library for converting various file formats to Markdown. Now with TypeScript support!",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -64,11 +64,11 @@
     "adm-zip": "^0.5.16",
     "cheerio": "^1.0.0",
     "file-type": "^16.5.4",
+    "image-size": "^2.0.2",
     "mammoth": "^1.8.0",
     "mime-types": "^2.1.35",
     "music-metadata": "^11.0.5",
     "papaparse": "^5.5.2",
-    "sharp": "^0.33.5",
     "turndown": "^7.2.0",
     "xlsx": "^0.18.5",
     "xml2js": "^0.6.2"
@@ -79,6 +79,7 @@
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/adm-zip": "^0.5.5",
+    "@types/image-size": "^0.7.0",
     "@types/mime-types": "^2.1.4",
     "@types/node": "^22.10.5",
     "@types/papaparse": "^5.3.15",
