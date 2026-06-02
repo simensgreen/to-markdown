@@ -20,6 +20,7 @@ export default [
       "adm-zip",
       "cheerio",
       "file-type",
+      "image-size",
       "mammoth",
       "mime-types",
       "music-metadata",
@@ -27,6 +28,14 @@ export default [
       "turndown",
       "xlsx",
       "xml2js",
+      // Optional peer deps (loaded dynamically) — keep them external.
+      "tesseract.js",
+      "gpt-tokenizer",
+      "pdfjs-dist",
+      "pdfjs-dist/legacy/build/pdf.mjs",
+      "pdfjs-dist/legacy/build/pdf.js",
+      "@napi-rs/canvas",
+      "canvas",
     ],
     plugins: [
       nodeResolve({
@@ -59,6 +68,7 @@ export default [
       "adm-zip",
       "cheerio",
       "file-type",
+      "image-size",
       "mammoth",
       "mime-types",
       "music-metadata",
@@ -66,6 +76,14 @@ export default [
       "turndown",
       "xlsx",
       "xml2js",
+      // Optional peer deps (loaded dynamically) — keep them external.
+      "tesseract.js",
+      "gpt-tokenizer",
+      "pdfjs-dist",
+      "pdfjs-dist/legacy/build/pdf.mjs",
+      "pdfjs-dist/legacy/build/pdf.js",
+      "@napi-rs/canvas",
+      "canvas",
     ],
     plugins: [
       nodeResolve({

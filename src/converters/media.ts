@@ -1,17 +1,25 @@
 import sizeOf from 'image-size';
 import { parseBuffer } from 'music-metadata';
 import { formatMarkdown } from '../utils/markdown.js';
-import type { ImageMetadata, AudioMetadata } from '../types/index.js';
+import { ocrImage, resolveOcrOptions } from '../utils/ocr.js';
+import type { OCROptions } from '../types/index.js';
 
 /**
- * Converts image buffer to Markdown with metadata
+ * Converts image buffer to Markdown with metadata.
+ *
+ * Backward compatible: when called as `convertImageToMarkdown(buffer, ext)`
+ * the output is unchanged (size + format metadata only).
+ *
+ * When `ocr` is provided and enabled, OCR text is appended below the metadata.
+ *
  * @param buffer - Image file buffer
  * @param ext - File extension
- * @returns Markdown string with image metadata
+ * @param ocr - Optional OCR configuration (opt-in)
  */
 export async function convertImageToMarkdown(
   buffer: Buffer,
-  ext: string
+  ext: string,
+  ocr?: boolean | OCROptions
 ): Promise<string> {
   try {
     const dimensions = sizeOf(buffer);
@@ -26,7 +34,18 @@ export async function convertImageToMarkdown(
       md += `Format: ${dimensions.type}\n`;
     }
 
-    // TODO: Add OCR for image text extraction
+    const ocrOpts = resolveOcrOptions(ocr);
+    if (ocrOpts) {
+      try {
+        const result = await ocrImage(buffer, ocrOpts);
+        const text = (result.text || '').trim();
+        if (text) {
+          md += `\n## Extracted Text (OCR)\n\n${text}\n`;
+        }
+      } catch (err: any) {
+        md += `\n<!-- OCR failed: ${err.message} -->\n`;
+      }
+    }
 
     return formatMarkdown(md);
   } catch (err: any) {
