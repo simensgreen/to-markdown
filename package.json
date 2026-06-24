@@ -47,12 +47,7 @@
     "jupyter",
     "to-markdown",
     "file-converter",
-    "typescript",
-    "ai",
-    "rag",
-    "llm",
-    "ocr",
-    "chunking"
+    "typescript"
   ],
   "author": "Cognipeer",
   "license": "MIT",
@@ -93,21 +88,8 @@
     "rollup": "^4.39.0",
     "tslib": "^2.8.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
-  },
-  "peerDependencies": {
-    "@napi-rs/canvas": "*",
-    "canvas": "*",
-    "gpt-tokenizer": "*",
-    "pdfjs-dist": "*",
-    "tesseract.js": "*"
-  },
-  "peerDependenciesMeta": {
-    "tesseract.js": { "optional": true },
-    "pdfjs-dist": { "optional": true },
-    "@napi-rs/canvas": { "optional": true },
-    "canvas": { "optional": true },
-    "gpt-tokenizer": { "optional": true }
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.7"
   },
   "engines": {
     "node": ">=16.0.0"
