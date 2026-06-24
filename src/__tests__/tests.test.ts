@@ -1,173 +1,196 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { Buffer } from 'buffer';
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
-import AdmZip from 'adm-zip';
-import { write as xlsxWrite, utils as xlsxUtils } from 'xlsx';
+import AdmZip from "adm-zip";
+import { Buffer } from "buffer";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { join } from "path";
+import { beforeAll, describe, expect, it } from "vitest";
+import { utils as xlsxUtils, write as xlsxWrite } from "xlsx";
 
 // ── Utilities ──────────────────────────────────────────────────────────────
-import { formatMarkdown, arrayToMarkdownTable } from '../utils/markdown.ts';
-import { detectFileType } from '../utils/fileDetection.ts';
+import { detectFileType } from "../utils/fileDetection.ts";
+import { arrayToMarkdownTable, formatMarkdown } from "../utils/markdown.ts";
 
 // ── Converters ─────────────────────────────────────────────────────────────
-import { convertHtmlToMarkdown, htmlToMarkdown } from '../converters/html.ts';
-import { convertTextFileToMarkdown, convertYoutubeToMarkdown, convertBingSerpToMarkdown } from '../converters/text.ts';
-import { convertCsvToMarkdown, convertExcelToMarkdown } from '../converters/spreadsheet.ts';
-import { convertPdfToMarkdown } from '../converters/pdf.ts';
-import { convertDocxToMarkdown } from '../converters/docx.ts';
-import { convertImageToMarkdown, convertAudioToMarkdown } from '../converters/media.ts';
-import { convertPptxToMarkdown, convertZipToMarkdown } from '../converters/archive.ts';
-import { convertRssAtomToMarkdown } from '../converters/xml.ts';
-import { convertIpynbToMarkdown } from '../converters/notebook.ts';
+import {
+  convertPptxToMarkdown,
+  convertZipToMarkdown,
+} from "../converters/archive.ts";
+import { convertDocxToMarkdown } from "../converters/docx.ts";
+import { convertHtmlToMarkdown, htmlToMarkdown } from "../converters/html.ts";
+import {
+  convertAudioToMarkdown,
+  convertImageToMarkdown,
+} from "../converters/media.ts";
+import { convertIpynbToMarkdown } from "../converters/notebook.ts";
+import { convertPdfToMarkdown } from "../converters/pdf.ts";
+import {
+  convertCsvToMarkdown,
+  convertExcelToMarkdown,
+} from "../converters/spreadsheet.ts";
+import {
+  convertBingSerpToMarkdown,
+  convertTextFileToMarkdown,
+  convertYoutubeToMarkdown,
+} from "../converters/text.ts";
+import { convertRssAtomToMarkdown } from "../converters/xml.ts";
 
 // ── Main API ───────────────────────────────────────────────────────────────
-import { convertToMarkdown, saveToMarkdownFile } from '../index.ts';
+import { convertToMarkdown, saveToMarkdownFile } from "../index.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. formatMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('formatMarkdown()', () => {
-  it('boş string döndürür - boş input', () => {
-    expect(formatMarkdown('')).toBe('');
+describe("formatMarkdown()", () => {
+  it("returns empty string for empty input", () => {
+    expect(formatMarkdown("")).toBe("");
   });
 
-  it('bold text başlığa dönüşür', () => {
-    const result = formatMarkdown('**Başlık**');
-    expect(result).toContain('## Başlık');
+  it("converts bold text to heading", () => {
+    const result = formatMarkdown("**Heading**");
+    expect(result).toContain("## Heading");
   });
 
-  it('bullet karakterleri normalize eder (•)', () => {
-    const result = formatMarkdown('• madde bir');
-    expect(result).toContain('* madde bir');
+  it("normalizes bullet characters (•)", () => {
+    const result = formatMarkdown("• item one");
+    expect(result).toContain("* item one");
   });
 
-  it('bullet karakterleri normalize eder (-)', () => {
-    const result = formatMarkdown('- madde iki');
-    expect(result).toContain('* madde iki');
+  it("normalizes bullet characters (-)", () => {
+    const result = formatMarkdown("- item two");
+    expect(result).toContain("* item two");
   });
 
-  it('ardışık boş satırları tek boş satıra indirger', () => {
-    const result = formatMarkdown('satır1\n\n\n\nsatır2');
+  it("collapses consecutive empty lines to a single empty line", () => {
+    const result = formatMarkdown("line1\n\n\n\nline2");
     expect(result).not.toMatch(/\n{3,}/);
   });
 
-  it('başta/sonda boşlukları temizler', () => {
-    const result = formatMarkdown('   merhaba   ');
-    expect(result).toBe('merhaba'); // küçük harfle başladığı için başlığa dönüşmez
+  it("trims leading/trailing whitespace", () => {
+    const result = formatMarkdown("   hello   ");
+    expect(result).toBe("hello"); // does not convert to heading because it starts with lowercase
   });
 
-  it('# ile başlayan satırları olduğu gibi bırakır', () => {
-    const result = formatMarkdown('# Başlık\nAlt metin');
-    expect(result).toContain('# Başlık');
+  it("preserves lines starting with #", () => {
+    const result = formatMarkdown("# Heading\nSubtext");
+    expect(result).toContain("# Heading");
   });
 
-  it('büyük harfle başlayan düz satır artık başlığa dönüşmez (bug fix)', () => {
-    const result = formatMarkdown('Kısa Başlık');
-    expect(result).not.toContain('## Kısa Başlık');
-    expect(result).toContain('Kısa Başlık'); // orijinal metin korunur
+  it("plain line starting with uppercase no longer converts to heading (bug fix)", () => {
+    const result = formatMarkdown("Short Title");
+    expect(result).not.toContain("## Short Title");
+    expect(result).toContain("Short Title"); // original text is preserved
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. arrayToMarkdownTable
 // ═══════════════════════════════════════════════════════════════════════════
-describe('arrayToMarkdownTable()', () => {
-  it('boş array için boş string döner', () => {
-    expect(arrayToMarkdownTable([])).toBe('');
+describe("arrayToMarkdownTable()", () => {
+  it("returns empty string for empty array", () => {
+    expect(arrayToMarkdownTable([])).toBe("");
   });
 
-  it('doğru header satırı oluşturur', () => {
-    const data = [['Ad', 'Soyad'], ['Ali', 'Veli']];
+  it("creates correct header row", () => {
+    const data = [
+      ["Name", "Surname"],
+      ["John", "Doe"],
+    ];
     const result = arrayToMarkdownTable(data);
-    expect(result).toContain('| Ad | Soyad |');
+    expect(result).toContain("| Name | Surname |");
   });
 
-  it('ayırıcı (separator) satırı oluşturur', () => {
-    const data = [['A', 'B'], ['1', '2']];
+  it("creates separator row", () => {
+    const data = [
+      ["A", "B"],
+      ["1", "2"],
+    ];
     const result = arrayToMarkdownTable(data);
-    expect(result).toContain('| --- | --- |');
+    expect(result).toContain("| --- | --- |");
   });
 
-  it('veri satırlarını doğru yazar', () => {
-    const data = [['Ad', 'Yaş'], ['Furkan', '25'], ['Ahmet', '30']];
+  it("correctly writes data rows", () => {
+    const data = [
+      ["Name", "Age"],
+      ["John", "25"],
+      ["Jane", "30"],
+    ];
     const result = arrayToMarkdownTable(data);
-    expect(result).toContain('| Furkan | 25 |');
-    expect(result).toContain('| Ahmet | 30 |');
+    expect(result).toContain("| John | 25 |");
+    expect(result).toContain("| Jane | 30 |");
   });
 
-  it('tek satırlık (sadece header) table oluşturur', () => {
-    const data = [['Kolon1', 'Kolon2']];
+  it("creates single-row (header only) table", () => {
+    const data = [["Column1", "Column2"]];
     const result = arrayToMarkdownTable(data);
-    expect(result).toContain('| Kolon1 | Kolon2 |');
-    expect(result).toContain('---');
+    expect(result).toContain("| Column1 | Column2 |");
+    expect(result).toContain("---");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 3. convertHtmlToMarkdown / htmlToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertHtmlToMarkdown()', () => {
-  it('basit h1 tagını markdown başlığına çevirir', () => {
-    const html = '<h1>Merhaba Dünya</h1>';
+describe("convertHtmlToMarkdown()", () => {
+  it("converts simple h1 tag to markdown heading", () => {
+    const html = "<h1>Hello World</h1>";
     const result = convertHtmlToMarkdown(html);
-    expect(result).toContain('# Merhaba Dünya');
+    expect(result).toContain("# Hello World");
   });
 
-  it('h2 tagını doğru çevirir', () => {
-    const result = convertHtmlToMarkdown('<h2>Alt Başlık</h2>');
-    expect(result).toContain('## Alt Başlık');
+  it("correctly converts h2 tag", () => {
+    const result = convertHtmlToMarkdown("<h2>Subheading</h2>");
+    expect(result).toContain("## Subheading");
   });
 
-  it('paragraph tagını düz metne çevirir', () => {
-    const result = convertHtmlToMarkdown('<p>Bu bir paragraf.</p>');
-    expect(result).toContain('paragraf');
+  it("converts paragraph tag to plain text", () => {
+    const result = convertHtmlToMarkdown("<p>This is a paragraph.</p>");
+    expect(result).toContain("paragraph");
   });
 
-  it('script ve style taglarını siler', () => {
-    const html = '<script>alert("xss")</script><p>içerik</p>';
+  it("removes script and style tags", () => {
+    const html = '<script>alert("xss")</script><p>content</p>';
     const result = convertHtmlToMarkdown(html);
-    expect(result).not.toContain('alert');
-    expect(result).not.toContain('<script>');
+    expect(result).not.toContain("alert");
+    expect(result).not.toContain("<script>");
   });
 
-  it('bold tagını markdown bold\'a çevirir', () => {
-    const result = htmlToMarkdown('<p><strong>kalın metin</strong></p>');
-    expect(result).toContain('**kalın metin**');
+  it("converts bold tag to markdown bold", () => {
+    const result = htmlToMarkdown("<p><strong>bold text</strong></p>");
+    expect(result).toContain("**bold text**");
   });
 
-  it('anchor tagını markdown linkine çevirir', () => {
-    const result = htmlToMarkdown('<a href="https://example.com">tıkla</a>');
-    expect(result).toContain('https://example.com');
+  it("converts anchor tag to markdown link", () => {
+    const result = htmlToMarkdown('<a href="https://example.com">click</a>');
+    expect(result).toContain("https://example.com");
   });
 
-  it('unordered list\'i markdown listesine çevirir', () => {
-    const html = '<ul><li>Elma</li><li>Armut</li></ul>';
+  it("converts unordered list to markdown list", () => {
+    const html = "<ul><li>Apple</li><li>Pear</li></ul>";
     const result = convertHtmlToMarkdown(html);
-    expect(result).toContain('Elma');
-    expect(result).toContain('Armut');
+    expect(result).toContain("Apple");
+    expect(result).toContain("Pear");
   });
 
-  it('Buffer input kabul eder', () => {
-    const buffer = Buffer.from('<h1>Başlık</h1>', 'utf-8');
+  it("accepts Buffer input", () => {
+    const buffer = Buffer.from("<h1>Heading</h1>", "utf-8");
     const result = convertHtmlToMarkdown(buffer);
-    expect(result).toContain('# Başlık');
+    expect(result).toContain("# Heading");
   });
 
-  it('karmaşık nested HTML işler', () => {
+  it("handles complex nested HTML", () => {
     const html = `
       <html><body>
-        <h1>Ana Başlık</h1>
-        <p>Paragraf metni <strong>kalın</strong> ve <em>italik</em></p>
-        <ul><li>madde 1</li><li>madde 2</li></ul>
+        <h1>Main Heading</h1>
+        <p>Paragraph text <strong>bold</strong> and <em>italic</em></p>
+        <ul><li>item 1</li><li>item 2</li></ul>
       </body></html>
     `;
     const result = convertHtmlToMarkdown(html);
-    expect(result).toContain('Ana Başlık');
-    expect(typeof result).toBe('string');
+    expect(result).toContain("Main Heading");
+    expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(10);
   });
 
-  it('geçersiz input için hata fırlatır', () => {
+  it("throws error for invalid input", () => {
     expect(() => convertHtmlToMarkdown(123 as any)).toThrow();
   });
 });
@@ -175,88 +198,88 @@ describe('convertHtmlToMarkdown()', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 4. convertTextFileToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertTextFileToMarkdown()', () => {
-  it('düz metni döndürür', () => {
-    const buffer = Buffer.from('Merhaba Dünya', 'utf-8');
-    expect(convertTextFileToMarkdown(buffer)).toBe('Merhaba Dünya');
+describe("convertTextFileToMarkdown()", () => {
+  it("returns plain text", () => {
+    const buffer = Buffer.from("Hello World", "utf-8");
+    expect(convertTextFileToMarkdown(buffer)).toBe("Hello World");
   });
 
-  it('boş buffer için boş string döner', () => {
-    expect(convertTextFileToMarkdown(Buffer.from(''))).toBe('');
+  it("returns empty string for empty buffer", () => {
+    expect(convertTextFileToMarkdown(Buffer.from(""))).toBe("");
   });
 
-  it('özel karakterleri korur', () => {
-    const text = 'Türkçe karakterler: ğ, ü, ş, ı, ö, ç';
-    const result = convertTextFileToMarkdown(Buffer.from(text, 'utf-8'));
-    expect(result).toContain('ğ');
-    expect(result).toContain('ş');
+  it("preserves special characters", () => {
+    const text = "Unicode characters: ñ, ü, ß, è, ø, ç";
+    const result = convertTextFileToMarkdown(Buffer.from(text, "utf-8"));
+    expect(result).toContain("ñ");
+    expect(result).toContain("ß");
   });
 
-  it('çok satırlı metni korur', () => {
-    const text = 'satır 1\nsatır 2\nsatır 3';
-    const result = convertTextFileToMarkdown(Buffer.from(text, 'utf-8'));
-    expect(result).toContain('satır 1');
-    expect(result).toContain('satır 3');
+  it("preserves multi-line text", () => {
+    const text = "line 1\nline 2\nline 3";
+    const result = convertTextFileToMarkdown(Buffer.from(text, "utf-8"));
+    expect(result).toContain("line 1");
+    expect(result).toContain("line 3");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 5. convertCsvToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertCsvToMarkdown()', () => {
-  it('basit CSV\'yi markdown tablosuna çevirir', () => {
-    const csv = 'Ad,Soyad,Yaş\nAli,Veli,25\nAyşe,Fatma,30';
-    const result = convertCsvToMarkdown(Buffer.from(csv, 'utf-8'));
-    expect(result).toContain('Ad');
-    expect(result).toContain('Soyad');
-    expect(result).toContain('Ali');
-    expect(result).toContain('Ayşe');
+describe("convertCsvToMarkdown()", () => {
+  it("converts simple CSV to markdown table", () => {
+    const csv = "Name,Surname,Age\nJohn,Doe,25\nJane,Smith,30";
+    const result = convertCsvToMarkdown(Buffer.from(csv, "utf-8"));
+    expect(result).toContain("Name");
+    expect(result).toContain("Surname");
+    expect(result).toContain("John");
+    expect(result).toContain("Jane");
   });
 
-  it('separator satırı içerir', () => {
-    const csv = 'A,B\n1,2';
-    const result = convertCsvToMarkdown(Buffer.from(csv, 'utf-8'));
-    expect(result).toContain('---');
+  it("includes separator row", () => {
+    const csv = "A,B\n1,2";
+    const result = convertCsvToMarkdown(Buffer.from(csv, "utf-8"));
+    expect(result).toContain("---");
   });
 
-  it('tek sütunlu CSV işler', () => {
-    const csv = 'Ürün\nElma\nArmut';
-    const result = convertCsvToMarkdown(Buffer.from(csv, 'utf-8'));
-    expect(result).toContain('Ürün');
-    expect(result).toContain('Elma');
+  it("handles single-column CSV", () => {
+    const csv = "Product\nApple\nPear";
+    const result = convertCsvToMarkdown(Buffer.from(csv, "utf-8"));
+    expect(result).toContain("Product");
+    expect(result).toContain("Apple");
   });
 
-  it('boşluk içeren değerleri doğru işler', () => {
-    const csv = '"Ad Soyad","Şehir"\n"Ahmet Yılmaz","İstanbul"';
-    const result = convertCsvToMarkdown(Buffer.from(csv, 'utf-8'));
-    expect(result).toContain('Ahmet Yılmaz');
+  it("correctly handles values with spaces", () => {
+    const csv = '"Full Name","City"\n"John Smith","New York"';
+    const result = convertCsvToMarkdown(Buffer.from(csv, "utf-8"));
+    expect(result).toContain("John Smith");
   });
 
-  it('büyük CSV\'de pipe karakteri kullanır', () => {
-    const csv = 'A,B,C\n1,2,3\n4,5,6';
-    const result = convertCsvToMarkdown(Buffer.from(csv, 'utf-8'));
-    expect(result).toContain('|');
+  it("uses pipe character in large CSV", () => {
+    const csv = "A,B,C\n1,2,3\n4,5,6";
+    const result = convertCsvToMarkdown(Buffer.from(csv, "utf-8"));
+    expect(result).toContain("|");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 6. convertRssAtomToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertRssAtomToMarkdown()', () => {
+describe("convertRssAtomToMarkdown()", () => {
   const rssXml = `<?xml version="1.0"?>
     <rss version="2.0">
       <channel>
         <title>Test Blog</title>
-        <description>Haberler</description>
+        <description>News</description>
         <item>
-          <title>Haber 1</title>
+          <title>News 1</title>
           <pubDate>Mon, 01 Jun 2026 00:00:00 GMT</pubDate>
-          <description>İlk haber içeriği</description>
+          <description>First news content</description>
         </item>
         <item>
-          <title>Haber 2</title>
+          <title>News 2</title>
           <pubDate>Tue, 02 Jun 2026 00:00:00 GMT</pubDate>
-          <description>İkinci haber içeriği</description>
+          <description>Second news content</description>
         </item>
       </channel>
     </rss>`;
@@ -264,43 +287,49 @@ describe('convertRssAtomToMarkdown()', () => {
   const atomXml = `<?xml version="1.0" encoding="UTF-8"?>
     <feed xmlns="http://www.w3.org/2005/Atom">
       <title>Atom Feed</title>
-      <subtitle>Açıklama</subtitle>
+      <subtitle>Description</subtitle>
       <entry>
-        <title>Giriş 1</title>
+        <title>Entry 1</title>
         <updated>2026-06-01T00:00:00Z</updated>
-        <summary>Özet içerik</summary>
+        <summary>Summary content</summary>
       </entry>
     </feed>`;
 
-  it('RSS başlığını markdown başlığına çevirir', async () => {
-    const result = await convertRssAtomToMarkdown(Buffer.from(rssXml, 'utf-8'));
-    expect(result).toContain('Test Blog');
+  it("converts RSS title to markdown heading", async () => {
+    const result = await convertRssAtomToMarkdown(Buffer.from(rssXml, "utf-8"));
+    expect(result).toContain("Test Blog");
   });
 
-  it('RSS item başlıklarını içerir', async () => {
-    const result = await convertRssAtomToMarkdown(Buffer.from(rssXml, 'utf-8'));
-    expect(result).toContain('Haber 1');
-    expect(result).toContain('Haber 2');
+  it("includes RSS item titles", async () => {
+    const result = await convertRssAtomToMarkdown(Buffer.from(rssXml, "utf-8"));
+    expect(result).toContain("News 1");
+    expect(result).toContain("News 2");
   });
 
-  it('RSS item açıklamalarını içerir', async () => {
-    const result = await convertRssAtomToMarkdown(Buffer.from(rssXml, 'utf-8'));
-    expect(result).toContain('İlk haber');
+  it("includes RSS item descriptions", async () => {
+    const result = await convertRssAtomToMarkdown(Buffer.from(rssXml, "utf-8"));
+    expect(result).toContain("First news");
   });
 
-  it('ATOM feed başlığını işler', async () => {
-    const result = await convertRssAtomToMarkdown(Buffer.from(atomXml, 'utf-8'));
-    expect(result).toContain('Atom Feed');
+  it("handles ATOM feed title", async () => {
+    const result = await convertRssAtomToMarkdown(
+      Buffer.from(atomXml, "utf-8"),
+    );
+    expect(result).toContain("Atom Feed");
   });
 
-  it('ATOM entry başlığını işler', async () => {
-    const result = await convertRssAtomToMarkdown(Buffer.from(atomXml, 'utf-8'));
-    expect(result).toContain('Giriş 1');
+  it("handles ATOM entry title", async () => {
+    const result = await convertRssAtomToMarkdown(
+      Buffer.from(atomXml, "utf-8"),
+    );
+    expect(result).toContain("Entry 1");
   });
 
-  it('geçersiz XML için hata fırlatır', async () => {
+  it("throws error for invalid XML", async () => {
     await expect(
-      convertRssAtomToMarkdown(Buffer.from('bu geçerli xml değil<<<', 'utf-8'))
+      convertRssAtomToMarkdown(
+        Buffer.from("this is not valid xml<<<", "utf-8"),
+      ),
     ).rejects.toThrow();
   });
 });
@@ -308,57 +337,57 @@ describe('convertRssAtomToMarkdown()', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. convertIpynbToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertIpynbToMarkdown()', () => {
+describe("convertIpynbToMarkdown()", () => {
   const notebook = {
     cells: [
-      { cell_type: 'markdown', source: ['# Başlık\n', 'Açıklama metni'] },
-      { cell_type: 'code', source: ['print("Hello, World!")\n', 'x = 1 + 1'] },
-      { cell_type: 'markdown', source: ['## Alt Başlık\n', 'Daha fazla metin'] },
-      { cell_type: 'raw', source: ['ham metin içeriği'] },
-    ]
+      { cell_type: "markdown", source: ["# Heading\n", "Description text"] },
+      { cell_type: "code", source: ['print("Hello, World!")\n', "x = 1 + 1"] },
+      { cell_type: "markdown", source: ["## Subheading\n", "More text"] },
+      { cell_type: "raw", source: ["raw text content"] },
+    ],
   };
 
-  it('markdown hücrelerini markdown\'a çevirir', async () => {
+  it("converts markdown cells to markdown", async () => {
     const result = await convertIpynbToMarkdown(
-      Buffer.from(JSON.stringify(notebook), 'utf-8')
+      Buffer.from(JSON.stringify(notebook), "utf-8"),
     );
-    expect(result).toContain('Başlık');
+    expect(result).toContain("Heading");
   });
 
-  it('kod hücrelerini code block\'a çevirir', async () => {
+  it("converts code cells to code block", async () => {
     const result = await convertIpynbToMarkdown(
-      Buffer.from(JSON.stringify(notebook), 'utf-8')
+      Buffer.from(JSON.stringify(notebook), "utf-8"),
     );
-    expect(result).toContain('```python');
+    expect(result).toContain("```python");
     expect(result).toContain('print("Hello, World!")');
   });
 
-  it('raw hücrelerini code block\'a çevirir', async () => {
+  it("converts raw cells to code block", async () => {
     const result = await convertIpynbToMarkdown(
-      Buffer.from(JSON.stringify(notebook), 'utf-8')
+      Buffer.from(JSON.stringify(notebook), "utf-8"),
     );
-    expect(result).toContain('ham metin');
+    expect(result).toContain("raw text");
   });
 
-  it('boş cells dizisi için boş string döner', async () => {
+  it("returns empty string for empty cells array", async () => {
     const empty = { cells: [] };
     const result = await convertIpynbToMarkdown(
-      Buffer.from(JSON.stringify(empty), 'utf-8')
+      Buffer.from(JSON.stringify(empty), "utf-8"),
     );
-    expect(result).toBe('');
+    expect(result).toBe("");
   });
 
-  it('cells anahtarı olmayan notebook için boş string döner', async () => {
+  it("returns empty string for notebook without cells key", async () => {
     const noCells = {};
     const result = await convertIpynbToMarkdown(
-      Buffer.from(JSON.stringify(noCells), 'utf-8')
+      Buffer.from(JSON.stringify(noCells), "utf-8"),
     );
-    expect(result).toBe('');
+    expect(result).toBe("");
   });
 
-  it('geçersiz JSON için hata fırlatır', async () => {
+  it("throws error for invalid JSON", async () => {
     await expect(
-      convertIpynbToMarkdown(Buffer.from('{invalid json', 'utf-8'))
+      convertIpynbToMarkdown(Buffer.from("{invalid json", "utf-8")),
     ).rejects.toThrow();
   });
 });
@@ -366,176 +395,186 @@ describe('convertIpynbToMarkdown()', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 8. convertYoutubeToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertYoutubeToMarkdown()', () => {
+describe("convertYoutubeToMarkdown()", () => {
   const youtubeHtml = `<html>
     <head>
       <title>Test Video - YouTube</title>
-      <meta name="description" content="Bu bir test videosu açıklamasıdır.">
+      <meta name="description" content="This is a test video description.">
     </head>
     <body></body>
   </html>`;
 
-  it('video başlığını içerir', () => {
+  it("includes video title", () => {
     const result = convertYoutubeToMarkdown(
-      Buffer.from(youtubeHtml, 'utf-8'),
-      'https://www.youtube.com/watch?v=abc123'
+      Buffer.from(youtubeHtml, "utf-8"),
+      "https://www.youtube.com/watch?v=abc123",
     );
-    expect(result).toContain('Test Video');
+    expect(result).toContain("Test Video");
   });
 
-  it('video açıklamasını içerir', () => {
+  it("includes video description", () => {
     const result = convertYoutubeToMarkdown(
-      Buffer.from(youtubeHtml, 'utf-8'),
-      'https://www.youtube.com/watch?v=abc123'
+      Buffer.from(youtubeHtml, "utf-8"),
+      "https://www.youtube.com/watch?v=abc123",
     );
-    expect(result).toContain('test videosu');
+    expect(result).toContain("test video");
   });
 
-  it('YouTube başlığı içerir', () => {
+  it("includes YouTube label", () => {
     const result = convertYoutubeToMarkdown(
-      Buffer.from(youtubeHtml, 'utf-8'),
-      'https://www.youtube.com/watch?v=abc123'
+      Buffer.from(youtubeHtml, "utf-8"),
+      "https://www.youtube.com/watch?v=abc123",
     );
-    expect(result).toContain('YouTube');
+    expect(result).toContain("YouTube");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 9. convertBingSerpToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertBingSerpToMarkdown()', () => {
+describe("convertBingSerpToMarkdown()", () => {
   const bingHtml = `<html><body>
-    <li class="b_algo"><p>Birinci sonuç metni burada.</p></li>
-    <li class="b_algo"><p>İkinci sonuç metni burada.</p></li>
+    <li class="b_algo"><p>First result text here.</p></li>
+    <li class="b_algo"><p>Second result text here.</p></li>
   </body></html>`;
 
-  it('sorgu metnini başlıkta içerir', () => {
+  it("includes query text in title", () => {
     const result = convertBingSerpToMarkdown(
-      Buffer.from(bingHtml, 'utf-8'),
-      'https://www.bing.com/search?q=typescript'
+      Buffer.from(bingHtml, "utf-8"),
+      "https://www.bing.com/search?q=typescript",
     );
-    expect(result).toContain('typescript');
+    expect(result).toContain("typescript");
   });
 
-  it('arama sonuçlarını içerir', () => {
+  it("includes search results", () => {
     const result = convertBingSerpToMarkdown(
-      Buffer.from(bingHtml, 'utf-8'),
-      'https://www.bing.com/search?q=test'
+      Buffer.from(bingHtml, "utf-8"),
+      "https://www.bing.com/search?q=test",
     );
-    expect(typeof result).toBe('string');
+    expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 10. convertToMarkdown – Ana API
+// 10. convertToMarkdown – Main API
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertToMarkdown() - Ana API', () => {
-  it('HTML string\'ini markdown\'a çevirir (forceExtension)', async () => {
-    const html = '<h1>Test</h1><p>Paragraf</p>';
-    const result = await convertToMarkdown(
-      Buffer.from(html, 'utf-8'),
-      { forceExtension: '.html' }
-    );
-    expect(result).toContain('Test');
-    expect(typeof result).toBe('string');
+describe("convertToMarkdown() - Main API", () => {
+  it("converts HTML string to markdown (forceExtension)", async () => {
+    const html = "<h1>Test</h1><p>Paragraph</p>";
+    const result = await convertToMarkdown(Buffer.from(html, "utf-8"), {
+      forceExtension: ".html",
+    });
+    expect(result).toContain("Test");
+    expect(typeof result).toBe("string");
   });
 
-  it('CSV buffer\'ını markdown tablosuna çevirir', async () => {
-    const csv = 'Ürün,Fiyat\nElma,5\nArmut,7';
-    const result = await convertToMarkdown(
-      Buffer.from(csv, 'utf-8'),
-      { forceExtension: '.csv' }
-    );
-    expect(result).toContain('Ürün');
-    expect(result).toContain('Elma');
+  it("converts CSV buffer to markdown table", async () => {
+    const csv = "Product,Price\nApple,5\nPear,7";
+    const result = await convertToMarkdown(Buffer.from(csv, "utf-8"), {
+      forceExtension: ".csv",
+    });
+    expect(result).toContain("Product");
+    expect(result).toContain("Apple");
   });
 
-  it('TXT buffer\'ını düz metin olarak döndürür', async () => {
-    const text = 'Düz metin içeriği';
-    const result = await convertToMarkdown(
-      Buffer.from(text, 'utf-8'),
-      { forceExtension: '.txt' }
-    );
-    expect(result).toContain('Düz metin');
+  it("returns TXT buffer as plain text", async () => {
+    const text = "Plain text content";
+    const result = await convertToMarkdown(Buffer.from(text, "utf-8"), {
+      forceExtension: ".txt",
+    });
+    expect(result).toContain("Plain text");
   });
 
-  it('IPYNB buffer\'ını doğru işler', async () => {
-    const nb = { cells: [{ cell_type: 'markdown', source: ['# Test\n'] }] };
+  it("correctly processes IPYNB buffer", async () => {
+    const nb = { cells: [{ cell_type: "markdown", source: ["# Test\n"] }] };
     const result = await convertToMarkdown(
-      Buffer.from(JSON.stringify(nb), 'utf-8'),
-      { forceExtension: '.ipynb' }
+      Buffer.from(JSON.stringify(nb), "utf-8"),
+      { forceExtension: ".ipynb" },
     );
-    expect(result).toContain('Test');
+    expect(result).toContain("Test");
   });
 
-  it('RSS XML buffer\'ını işler', async () => {
+  it("processes RSS XML buffer", async () => {
     const rss = `<?xml version="1.0"?><rss version="2.0"><channel><title>Feed</title></channel></rss>`;
-    const result = await convertToMarkdown(
-      Buffer.from(rss, 'utf-8'),
-      { forceExtension: '.rss' }
+    const result = await convertToMarkdown(Buffer.from(rss, "utf-8"), {
+      forceExtension: ".rss",
+    });
+    expect(result).toContain("Feed");
+  });
+
+  it("performs special processing for YouTube URL", async () => {
+    const html = "<html><head><title>Video - YouTube</title></head></html>";
+    const result = await convertToMarkdown(Buffer.from(html, "utf-8"), {
+      url: "https://www.youtube.com/watch?v=abc",
+      forceExtension: ".xyz",
+    });
+    expect(result).toContain("YouTube");
+  });
+
+  it("throws error for non-existent file path", async () => {
+    await expect(convertToMarkdown("/nonexistent/file.pdf")).rejects.toThrow(
+      "File not found",
     );
-    expect(result).toContain('Feed');
   });
 
-  it('YouTube URL\'si için özel işleme yapar', async () => {
-    const html = '<html><head><title>Video - YouTube</title></head></html>';
-    const result = await convertToMarkdown(
-      Buffer.from(html, 'utf-8'),
-      { url: 'https://www.youtube.com/watch?v=abc', forceExtension: '.xyz' }
-    );
-    expect(result).toContain('YouTube');
-  });
-
-  it('var olmayan dosya yolu için hata fırlatır', async () => {
-    await expect(
-      convertToMarkdown('/olmayan/dosya.pdf')
-    ).rejects.toThrow('File not found');
-  });
-
-  it('geçersiz input tipi için hata fırlatır', async () => {
-    await expect(
-      convertToMarkdown(12345 as any)
-    ).rejects.toThrow();
+  it("throws error for invalid input type", async () => {
+    await expect(convertToMarkdown(12345 as any)).rejects.toThrow();
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 11. saveToMarkdownFile
 // ═══════════════════════════════════════════════════════════════════════════
-describe('saveToMarkdownFile()', () => {
-  const testOutputDir = join(process.cwd(), 'test-output-temp');
+describe("saveToMarkdownFile()", () => {
+  const testOutputDir = join(process.cwd(), "test-output-temp");
 
-  it('dosyayı kaydeder ve path döndürür', async () => {
-    const filePath = await saveToMarkdownFile('# Test İçeriği', 'test-save', testOutputDir);
+  it("saves file and returns path", async () => {
+    const filePath = await saveToMarkdownFile(
+      "# Test Content",
+      "test-save",
+      testOutputDir,
+    );
     expect(existsSync(filePath)).toBe(true);
     unlinkSync(filePath);
   });
 
-  it('dosya içeriği doğru yazılır', async () => {
-    const content = '# Merhaba\nBu bir test.';
-    const filePath = await saveToMarkdownFile(content, 'test-content', testOutputDir);
-    const read = readFileSync(filePath, 'utf-8');
+  it("file content is written correctly", async () => {
+    const content = "# Hello\nThis is a test.";
+    const filePath = await saveToMarkdownFile(
+      content,
+      "test-content",
+      testOutputDir,
+    );
+    const read = readFileSync(filePath, "utf-8");
     expect(read).toBe(content);
     unlinkSync(filePath);
   });
 
-  it('.md uzantısı otomatik eklenir', async () => {
-    const filePath = await saveToMarkdownFile('içerik', 'dosya-adi', testOutputDir);
-    expect(filePath.endsWith('.md')).toBe(true);
+  it("automatically appends .md extension", async () => {
+    const filePath = await saveToMarkdownFile(
+      "content",
+      "file-name",
+      testOutputDir,
+    );
+    expect(filePath.endsWith(".md")).toBe(true);
     unlinkSync(filePath);
   });
 
-  it('.md uzantısı zaten varsa tekrar eklemez', async () => {
-    const filePath = await saveToMarkdownFile('içerik', 'dosya.md', testOutputDir);
-    expect(filePath.endsWith('.md')).toBe(true);
-    expect(filePath).not.toContain('.md.md');
+  it("does not add .md extension if already present", async () => {
+    const filePath = await saveToMarkdownFile(
+      "content",
+      "file.md",
+      testOutputDir,
+    );
+    expect(filePath.endsWith(".md")).toBe(true);
+    expect(filePath).not.toContain(".md.md");
     unlinkSync(filePath);
   });
 
-  it('klasör yoksa oluşturur', async () => {
-    const newDir = join(testOutputDir, 'alt-klasor-' + Date.now());
-    const filePath = await saveToMarkdownFile('test', 'deneme', newDir);
+  it("creates directory if it does not exist", async () => {
+    const newDir = join(testOutputDir, "sub-dir-" + Date.now());
+    const filePath = await saveToMarkdownFile("test", "sample", newDir);
     expect(existsSync(filePath)).toBe(true);
     unlinkSync(filePath);
   });
@@ -544,176 +583,196 @@ describe('saveToMarkdownFile()', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 12. detectFileType
 // ═══════════════════════════════════════════════════════════════════════════
-describe('detectFileType()', () => {
-  const tempDir = join(process.cwd(), 'test-output-temp');
+describe("detectFileType()", () => {
+  const tempDir = join(process.cwd(), "test-output-temp");
 
-  it('dosya yolundan uzantıyı tespit eder (.csv)', async () => {
+  it("detects extension from file path (.csv)", async () => {
     const tempFile = join(tempDir, `detect-test-${Date.now()}.csv`);
-    writeFileSync(tempFile, 'A,B\n1,2', 'utf-8');
+    writeFileSync(tempFile, "A,B\n1,2", "utf-8");
     try {
       const result = await detectFileType(tempFile);
-      expect(result.extension).toBe('.csv');
+      expect(result.extension).toBe(".csv");
       expect(result.buffer).toBeInstanceOf(Buffer);
     } finally {
       unlinkSync(tempFile);
     }
   });
 
-  it('forceExtension seçeneğini dikkate alır', async () => {
+  it("respects forceExtension option", async () => {
     const tempFile = join(tempDir, `detect-test2-${Date.now()}.txt`);
-    writeFileSync(tempFile, 'içerik', 'utf-8');
+    writeFileSync(tempFile, "content", "utf-8");
     try {
-      const result = await detectFileType(tempFile, { forceExtension: '.html' });
-      expect(result.extension).toBe('.html');
+      const result = await detectFileType(tempFile, {
+        forceExtension: ".html",
+      });
+      expect(result.extension).toBe(".html");
     } finally {
       unlinkSync(tempFile);
     }
   });
 
-  it('data URL (base64) girdisini işler', async () => {
-    const base64 = 'data:text/csv;base64,' + Buffer.from('A,B\n1,2').toString('base64');
+  it("handles data URL (base64) input", async () => {
+    const base64 =
+      "data:text/csv;base64," + Buffer.from("A,B\n1,2").toString("base64");
     const result = await detectFileType(base64);
     expect(result.buffer).toBeInstanceOf(Buffer);
-    expect(result.buffer.toString()).toContain('A,B');
+    expect(result.buffer.toString()).toContain("A,B");
   });
 
-  it('Buffer girdisini forceExtension ile işler', async () => {
-    const buf = Buffer.from('test içerik');
-    const result = await detectFileType(buf, { forceExtension: '.txt' });
-    expect(result.extension).toBe('.txt');
+  it("handles Buffer input with forceExtension", async () => {
+    const buf = Buffer.from("test content");
+    const result = await detectFileType(buf, { forceExtension: ".txt" });
+    expect(result.extension).toBe(".txt");
     expect(result.buffer).toBeInstanceOf(Buffer);
   });
 
-  it('PNG buffer için magic bytes\'tan uzantı tespit eder', async () => {
-    // 1x1 piksel minimal PNG
-    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-    const pngBuffer = Buffer.from(pngBase64, 'base64');
+  it("detects extension from magic bytes for PNG buffer", async () => {
+    // minimal 1x1 pixel PNG
+    const pngBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const pngBuffer = Buffer.from(pngBase64, "base64");
     const result = await detectFileType(pngBuffer);
-    expect(result.extension).toBe('.png');
+    expect(result.extension).toBe(".png");
   });
 
-  it('var olmayan dosya için hata fırlatır', async () => {
-    await expect(
-      detectFileType('/yok/boyle/bir/dosya.pdf')
-    ).rejects.toThrow('File not found');
+  it("throws error for non-existent file", async () => {
+    await expect(detectFileType("/no/such/file.pdf")).rejects.toThrow(
+      "File not found",
+    );
   });
 
-  it('geçersiz input tipi için hata fırlatır', async () => {
-    await expect(
-      detectFileType(99999 as any)
-    ).rejects.toThrow();
+  it("throws error for invalid input type", async () => {
+    await expect(detectFileType(99999 as any)).rejects.toThrow();
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 13. convertExcelToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertExcelToMarkdown()', () => {
+describe("convertExcelToMarkdown()", () => {
   let excelBuffer: Buffer;
 
   beforeAll(() => {
     const wb = xlsxUtils.book_new();
     const ws = xlsxUtils.aoa_to_sheet([
-      ['Ad', 'Soyad', 'Yaş'],
-      ['Ali', 'Veli', 25],
-      ['Ayşe', 'Fatma', 30],
+      ["Name", "Surname", "Age"],
+      ["John", "Doe", 25],
+      ["Jane", "Smith", 30],
     ]);
-    xlsxUtils.book_append_sheet(wb, ws, 'Çalışanlar');
-    excelBuffer = Buffer.from(xlsxWrite(wb, { type: 'buffer', bookType: 'xlsx' }));
+    xlsxUtils.book_append_sheet(wb, ws, "Employees");
+    excelBuffer = Buffer.from(
+      xlsxWrite(wb, { type: "buffer", bookType: "xlsx" }),
+    );
   });
 
-  it('sheet adını başlık olarak ekler', async () => {
+  it("adds sheet name as heading", async () => {
     const result = await convertExcelToMarkdown(excelBuffer);
-    expect(result).toContain('Çalışanlar');
+    expect(result).toContain("Employees");
   });
 
-  it('sütun başlıklarını markdown tablosuna yazar', async () => {
+  it("writes column headers to markdown table", async () => {
     const result = await convertExcelToMarkdown(excelBuffer);
-    expect(result).toContain('Ad');
-    expect(result).toContain('Soyad');
-    expect(result).toContain('Yaş');
+    expect(result).toContain("Name");
+    expect(result).toContain("Surname");
+    expect(result).toContain("Age");
   });
 
-  it('veri satırlarını yazar', async () => {
+  it("writes data rows", async () => {
     const result = await convertExcelToMarkdown(excelBuffer);
-    expect(result).toContain('Ali');
-    expect(result).toContain('Ayşe');
+    expect(result).toContain("John");
+    expect(result).toContain("Jane");
   });
 
-  it('separator satırı içerir', async () => {
+  it("includes separator row", async () => {
     const result = await convertExcelToMarkdown(excelBuffer);
-    expect(result).toContain('---');
+    expect(result).toContain("---");
   });
 
-  it('çoklu sheet destekler', async () => {
+  it("supports multiple sheets", async () => {
     const wb2 = xlsxUtils.book_new();
-    xlsxUtils.book_append_sheet(wb2, xlsxUtils.aoa_to_sheet([['X'], [1]]), 'Sayfa1');
-    xlsxUtils.book_append_sheet(wb2, xlsxUtils.aoa_to_sheet([['Y'], [2]]), 'Sayfa2');
-    const buf = Buffer.from(xlsxWrite(wb2, { type: 'buffer', bookType: 'xlsx' }));
+    xlsxUtils.book_append_sheet(
+      wb2,
+      xlsxUtils.aoa_to_sheet([["X"], [1]]),
+      "Sheet1",
+    );
+    xlsxUtils.book_append_sheet(
+      wb2,
+      xlsxUtils.aoa_to_sheet([["Y"], [2]]),
+      "Sheet2",
+    );
+    const buf = Buffer.from(
+      xlsxWrite(wb2, { type: "buffer", bookType: "xlsx" }),
+    );
     const result = await convertExcelToMarkdown(buf);
-    expect(result).toContain('Sayfa1');
-    expect(result).toContain('Sayfa2');
+    expect(result).toContain("Sheet1");
+    expect(result).toContain("Sheet2");
   });
 
-  it('geçersiz buffer\'ı hata vermeden parse eder (xlsx toleranslı)', async () => {
-    // xlsx kütüphanesi hatalı veriyi "Sheet1" adlı boş sheet olarak işler, hata fırlatmaz
-    const result = await convertExcelToMarkdown(Buffer.from('bu excel değil'));
-    expect(typeof result).toBe('string'); // crash etmez
+  it("parses invalid buffer without error (xlsx is tolerant)", async () => {
+    // xlsx library processes invalid data as an empty sheet named "Sheet1", does not throw
+    const result = await convertExcelToMarkdown(
+      Buffer.from("not an excel file"),
+    );
+    expect(typeof result).toBe("string"); // does not crash
   });
 
-  it('convertToMarkdown .xlsx formatını işler', async () => {
-    const result = await convertToMarkdown(excelBuffer, { forceExtension: '.xlsx' });
-    expect(result).toContain('Çalışanlar');
+  it("convertToMarkdown handles .xlsx format", async () => {
+    const result = await convertToMarkdown(excelBuffer, {
+      forceExtension: ".xlsx",
+    });
+    expect(result).toContain("Employees");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 14. convertZipToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertZipToMarkdown()', () => {
+describe("convertZipToMarkdown()", () => {
   let zipBuffer: Buffer;
 
   beforeAll(() => {
     const zip = new AdmZip();
-    zip.addFile('readme.txt', Buffer.from('Merhaba Dünya!'));
-    zip.addFile('data.csv', Buffer.from('A,B\n1,2'));
-    zip.addFile('subfolder/notes.txt', Buffer.from('Alt klasör notu'));
+    zip.addFile("readme.txt", Buffer.from("Hello World!"));
+    zip.addFile("data.csv", Buffer.from("A,B\n1,2"));
+    zip.addFile("subfolder/notes.txt", Buffer.from("Subfolder note"));
     zipBuffer = zip.toBuffer();
   });
 
-  it('dosya adlarını listeler', async () => {
+  it("lists file names", async () => {
     const result = await convertZipToMarkdown(zipBuffer, {});
-    expect(result).toContain('readme.txt');
-    expect(result).toContain('data.csv');
+    expect(result).toContain("readme.txt");
+    expect(result).toContain("data.csv");
   });
 
-  it('metin dosyası içeriğini içerir', async () => {
+  it("includes text file content", async () => {
     const result = await convertZipToMarkdown(zipBuffer, {});
-    expect(result).toContain('Merhaba Dünya!');
-    expect(result).toContain('Alt klasör notu');
+    expect(result).toContain("Hello World!");
+    expect(result).toContain("Subfolder note");
   });
 
-  it('CSV içeriğini tablo olarak çevirir', async () => {
+  it("converts CSV content to table", async () => {
     const result = await convertZipToMarkdown(zipBuffer, {});
     // CSV converted to markdown table — header should appear
-    expect(result).toContain('A');
+    expect(result).toContain("A");
   });
 
-  it('string döndürür', async () => {
+  it("returns string", async () => {
     const result = await convertZipToMarkdown(zipBuffer, {});
-    expect(typeof result).toBe('string');
+    expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);
   });
 
-  it('convertToMarkdown .zip formatını işler', async () => {
-    const result = await convertToMarkdown(zipBuffer, { forceExtension: '.zip' });
-    expect(typeof result).toBe('string');
+  it("convertToMarkdown handles .zip format", async () => {
+    const result = await convertToMarkdown(zipBuffer, {
+      forceExtension: ".zip",
+    });
+    expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);
   });
 
-  it('geçersiz buffer için hata fırlatır', async () => {
+  it("throws error for invalid buffer", async () => {
     await expect(
-      convertZipToMarkdown(Buffer.from('bu zip değil'), {})
+      convertZipToMarkdown(Buffer.from("not a zip file"), {}),
     ).rejects.toThrow();
   });
 });
@@ -721,199 +780,203 @@ describe('convertZipToMarkdown()', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 15. convertPptxToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertPptxToMarkdown()', () => {
+describe("convertPptxToMarkdown()", () => {
   let pptxBuffer: Buffer;
 
   beforeAll(() => {
     const zip = new AdmZip();
     zip.addFile(
-      'ppt/slides/slide1.xml',
+      "ppt/slides/slide1.xml",
       Buffer.from(
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
           <p:cSld><p:spTree>
             <p:sp><p:txBody>
-              <a:p><a:r><a:t>Slayt Başlığı</a:t></a:r></a:p>
-              <a:p><a:r><a:t>Slayt Açıklaması</a:t></a:r></a:p>
+              <a:p><a:r><a:t>Slide Title</a:t></a:r></a:p>
+              <a:p><a:r><a:t>Slide Description</a:t></a:r></a:p>
             </p:txBody></p:sp>
           </p:spTree></p:cSld>
-        </p:sld>`
-      )
+        </p:sld>`,
+      ),
     );
     zip.addFile(
-      'ppt/slides/slide2.xml',
+      "ppt/slides/slide2.xml",
       Buffer.from(
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
           <p:cSld><p:spTree>
             <p:sp><p:txBody>
-              <a:p><a:r><a:t>İkinci Slayt</a:t></a:r></a:p>
+              <a:p><a:r><a:t>Second Slide</a:t></a:r></a:p>
             </p:txBody></p:sp>
           </p:spTree></p:cSld>
-        </p:sld>`
-      )
+        </p:sld>`,
+      ),
     );
     pptxBuffer = zip.toBuffer();
   });
 
-  it('slayt içeriğini çıkarır', async () => {
+  it("extracts slide content", async () => {
     const result = await convertPptxToMarkdown(pptxBuffer);
-    expect(result).toContain('Slayt Başlığı');
+    expect(result).toContain("Slide Title");
   });
 
-  it('birden fazla slaytı işler', async () => {
+  it("processes multiple slides", async () => {
     const result = await convertPptxToMarkdown(pptxBuffer);
-    expect(result).toContain('İkinci Slayt');
+    expect(result).toContain("Second Slide");
   });
 
-  it('slayt açıklamasını çıkarır', async () => {
+  it("extracts slide description", async () => {
     const result = await convertPptxToMarkdown(pptxBuffer);
-    expect(result).toContain('Slayt Açıklaması');
+    expect(result).toContain("Slide Description");
   });
 
-  it('string döndürür', async () => {
+  it("returns string", async () => {
     const result = await convertPptxToMarkdown(pptxBuffer);
-    expect(typeof result).toBe('string');
+    expect(typeof result).toBe("string");
   });
 
-  it('convertToMarkdown .pptx formatını işler', async () => {
-    const result = await convertToMarkdown(pptxBuffer, { forceExtension: '.pptx' });
-    expect(result).toContain('Slayt Başlığı');
+  it("convertToMarkdown handles .pptx format", async () => {
+    const result = await convertToMarkdown(pptxBuffer, {
+      forceExtension: ".pptx",
+    });
+    expect(result).toContain("Slide Title");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 16. convertDocxToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertDocxToMarkdown()', () => {
+describe("convertDocxToMarkdown()", () => {
   let docxBuffer: Buffer;
 
   beforeAll(() => {
     const zip = new AdmZip();
     zip.addFile(
-      '[Content_Types].xml',
+      "[Content_Types].xml",
       Buffer.from(
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
           <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
           <Override PartName="/word/document.xml"
             ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-        </Types>`
-      )
+        </Types>`,
+      ),
     );
     zip.addFile(
-      '_rels/.rels',
+      "_rels/.rels",
       Buffer.from(
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
           <Relationship Id="rId1"
             Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"
             Target="word/document.xml"/>
-        </Relationships>`
-      )
+        </Relationships>`,
+      ),
     );
     zip.addFile(
-      'word/document.xml',
+      "word/document.xml",
       Buffer.from(
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
           <w:body>
-            <w:p><w:r><w:t>Merhaba Dünya</w:t></w:r></w:p>
-            <w:p><w:r><w:t>İkinci paragraf</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Hello World</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Second paragraph</w:t></w:r></w:p>
           </w:body>
-        </w:document>`
-      )
+        </w:document>`,
+      ),
     );
     zip.addFile(
-      'word/_rels/document.xml.rels',
+      "word/_rels/document.xml.rels",
       Buffer.from(
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`
-      )
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`,
+      ),
     );
     docxBuffer = zip.toBuffer();
   });
 
-  it('string döndürür', async () => {
+  it("returns string", async () => {
     const result = await convertDocxToMarkdown(docxBuffer);
-    expect(typeof result).toBe('string');
+    expect(typeof result).toBe("string");
   });
 
-  it('metin içeriğini çıkarır', async () => {
+  it("extracts text content", async () => {
     const result = await convertDocxToMarkdown(docxBuffer);
-    expect(result.length).toBeGreaterThanOrEqual(0); // mammoth minimal DOCX'ten metin çıkarabilir
+    expect(result.length).toBeGreaterThanOrEqual(0); // mammoth can extract text from minimal DOCX
   });
 
-  it('geçersiz buffer için hata fırlatır', async () => {
+  it("throws error for invalid buffer", async () => {
     await expect(
-      convertDocxToMarkdown(Buffer.from('bu docx değil'))
+      convertDocxToMarkdown(Buffer.from("not a docx file")),
     ).rejects.toThrow();
   });
 
-  it('convertToMarkdown .docx formatını işler', async () => {
-    const result = await convertToMarkdown(docxBuffer, { forceExtension: '.docx' });
-    expect(typeof result).toBe('string');
+  it("convertToMarkdown handles .docx format", async () => {
+    const result = await convertToMarkdown(docxBuffer, {
+      forceExtension: ".docx",
+    });
+    expect(typeof result).toBe("string");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 17. convertImageToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertImageToMarkdown()', () => {
-  // 1x1 piksel gri PNG (bilinen geçerli PNG binary)
+describe("convertImageToMarkdown()", () => {
+  // 1x1 pixel gray PNG (known valid PNG binary)
   const PNG_1x1 = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-    'base64'
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
   );
 
-  it('string döndürür', async () => {
-    const result = await convertImageToMarkdown(PNG_1x1, '.png');
-    expect(typeof result).toBe('string');
+  it("returns string", async () => {
+    const result = await convertImageToMarkdown(PNG_1x1, ".png");
+    expect(typeof result).toBe("string");
   });
 
-  it('boyut bilgisi içerir (genişlik x yükseklik)', async () => {
-    const result = await convertImageToMarkdown(PNG_1x1, '.png');
+  it("includes size information (width x height)", async () => {
+    const result = await convertImageToMarkdown(PNG_1x1, ".png");
     expect(result).toMatch(/1x1|ImageSize/);
   });
 
-  it('format bilgisi içerir', async () => {
-    const result = await convertImageToMarkdown(PNG_1x1, '.png');
-    expect(result.toLowerCase()).toContain('png');
+  it("includes format information", async () => {
+    const result = await convertImageToMarkdown(PNG_1x1, ".png");
+    expect(result.toLowerCase()).toContain("png");
   });
 
-  it('geçersiz buffer için hata fırlatır', async () => {
+  it("throws error for invalid buffer", async () => {
     await expect(
-      convertImageToMarkdown(Buffer.from('bu resim değil'), '.png')
+      convertImageToMarkdown(Buffer.from("not an image"), ".png"),
     ).rejects.toThrow();
   });
 
-  it('convertToMarkdown .png formatını işler', async () => {
-    const result = await convertToMarkdown(PNG_1x1, { forceExtension: '.png' });
-    expect(typeof result).toBe('string');
+  it("convertToMarkdown handles .png format", async () => {
+    const result = await convertToMarkdown(PNG_1x1, { forceExtension: ".png" });
+    expect(typeof result).toBe("string");
   });
 
-  it('convertToMarkdown .jpg formatını işler', async () => {
-    // jpg için de aynı PNG buffer'ı format testi yapıyoruz
-    const result = await convertToMarkdown(PNG_1x1, { forceExtension: '.jpg' });
-    expect(typeof result).toBe('string');
+  it("convertToMarkdown handles .jpg format", async () => {
+    // using the same PNG buffer to test format handling
+    const result = await convertToMarkdown(PNG_1x1, { forceExtension: ".jpg" });
+    expect(typeof result).toBe("string");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 18. convertAudioToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertAudioToMarkdown()', () => {
-  it('geçersiz buffer için hata fırlatır', async () => {
+describe("convertAudioToMarkdown()", () => {
+  it("throws error for invalid buffer", async () => {
     await expect(
-      convertAudioToMarkdown(Buffer.from('bu ses dosyası değil'), '.mp3')
+      convertAudioToMarkdown(Buffer.from("not an audio file"), ".mp3"),
     ).rejects.toThrow();
   });
 
-  it('boş buffer için hata fırlatır', async () => {
+  it("throws error for empty buffer", async () => {
     await expect(
-      convertAudioToMarkdown(Buffer.alloc(0), '.wav')
+      convertAudioToMarkdown(Buffer.alloc(0), ".wav"),
     ).rejects.toThrow();
   });
 });
@@ -921,41 +984,40 @@ describe('convertAudioToMarkdown()', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 19. convertPdfToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertPdfToMarkdown()', () => {
-  it('geçersiz buffer için hata fırlatır veya boş döner', async () => {
-    // pdf2md bazı buffer'larla çökmek yerine hata fırlatır
+describe("convertPdfToMarkdown()", () => {
+  it("throws error or returns empty for invalid buffer", async () => {
+    // pdf2md throws an error instead of crashing with some buffers
     try {
-      const result = await convertPdfToMarkdown(Buffer.from('bu pdf değil'));
-      expect(typeof result).toBe('string');
+      const result = await convertPdfToMarkdown(Buffer.from("not a pdf file"));
+      expect(typeof result).toBe("string");
     } catch (err: any) {
       expect(err.message).toBeTruthy();
     }
   });
 
-  it('minimal PDF buffer ile çalışır veya anlamlı hata verir', async () => {
+  it("works with minimal PDF buffer or returns meaningful error", async () => {
     const minimalPdf = Buffer.from(
-      '%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
-      '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
-      '3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\n' +
-      'xref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n' +
-      '0000000058 00000 n \n0000000115 00000 n \n' +
-      'trailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF'
+      "%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n" +
+        "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
+        "3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\n" +
+        "xref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n" +
+        "0000000058 00000 n \n0000000115 00000 n \n" +
+        "trailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF",
     );
     try {
       const result = await convertPdfToMarkdown(minimalPdf);
-      expect(typeof result).toBe('string');
+      expect(typeof result).toBe("string");
     } catch (err: any) {
       expect(err.message).toBeTruthy();
     }
   });
 
-  it('convertToMarkdown .pdf formatını hata yönetimiyle işler', async () => {
+  it("convertToMarkdown handles .pdf format with error handling", async () => {
     try {
-      const result = await convertToMarkdown(
-        Buffer.from('fake pdf content'),
-        { forceExtension: '.pdf' }
-      );
-      expect(typeof result).toBe('string');
+      const result = await convertToMarkdown(Buffer.from("fake pdf content"), {
+        forceExtension: ".pdf",
+      });
+      expect(typeof result).toBe("string");
     } catch (err: any) {
       expect(err.message).toBeTruthy();
     }
@@ -963,194 +1025,216 @@ describe('convertPdfToMarkdown()', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 20. convertToMarkdown – Dosya Yolu Tabanlı Testler
+// 20. convertToMarkdown – File Path Based Tests
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertToMarkdown() - Dosya Yolu', () => {
-  const tmpDir = join(process.cwd(), 'test-output-temp');
+describe("convertToMarkdown() - File Path Based Tests", () => {
+  const tmpDir = join(process.cwd(), "test-output-temp");
 
-  it('.html dosyasını yoldan okuyup markdown\'a çevirir', async () => {
+  it("reads .html file from path and converts to markdown", async () => {
     const filePath = join(tmpDir, `test-${Date.now()}.html`);
-    writeFileSync(filePath, '<h1>Dosyadan Başlık</h1><p>İçerik</p>', 'utf-8');
-    try {
-      const result = await convertToMarkdown(filePath);
-      expect(result).toContain('Dosyadan Başlık');
-    } finally {
-      unlinkSync(filePath);
-    }
-  });
-
-  it('.txt dosyasını yoldan okur', async () => {
-    const filePath = join(tmpDir, `test-${Date.now()}.txt`);
-    writeFileSync(filePath, 'Dosyadan okunan metin', 'utf-8');
-    try {
-      const result = await convertToMarkdown(filePath);
-      expect(result).toContain('Dosyadan okunan metin');
-    } finally {
-      unlinkSync(filePath);
-    }
-  });
-
-  it('.csv dosyasını yoldan okuyup tabloya çevirir', async () => {
-    const filePath = join(tmpDir, `test-${Date.now()}.csv`);
-    writeFileSync(filePath, 'Ürün,Fiyat\nElma,5\nArmut,7', 'utf-8');
-    try {
-      const result = await convertToMarkdown(filePath);
-      expect(result).toContain('Ürün');
-      expect(result).toContain('Elma');
-    } finally {
-      unlinkSync(filePath);
-    }
-  });
-
-  it('.ipynb dosyasını yoldan okur', async () => {
-    const nb = { cells: [{ cell_type: 'code', source: ['x = 42\n'] }] };
-    const filePath = join(tmpDir, `test-${Date.now()}.ipynb`);
-    writeFileSync(filePath, JSON.stringify(nb), 'utf-8');
-    try {
-      const result = await convertToMarkdown(filePath);
-      expect(result).toContain('x = 42');
-    } finally {
-      unlinkSync(filePath);
-    }
-  });
-
-  it('fileName seçeneğini destekler (Buffer + fileName)', async () => {
-    const csv = 'A,B\n1,2';
-    const result = await convertToMarkdown(
-      Buffer.from(csv, 'utf-8'),
-      { fileName: 'data.csv' }
+    writeFileSync(
+      filePath,
+      "<h1>Heading from File</h1><p>Content</p>",
+      "utf-8",
     );
-    expect(result).toContain('A');
+    try {
+      const result = await convertToMarkdown(filePath);
+      expect(result).toContain("Heading from File");
+    } finally {
+      unlinkSync(filePath);
+    }
+  });
+
+  it("reads .txt file from path", async () => {
+    const filePath = join(tmpDir, `test-${Date.now()}.txt`);
+    writeFileSync(filePath, "Text read from file", "utf-8");
+    try {
+      const result = await convertToMarkdown(filePath);
+      expect(result).toContain("Text read from file");
+    } finally {
+      unlinkSync(filePath);
+    }
+  });
+
+  it("reads .csv file from path and converts to table", async () => {
+    const filePath = join(tmpDir, `test-${Date.now()}.csv`);
+    writeFileSync(filePath, "Product,Price\nApple,5\nPear,7", "utf-8");
+    try {
+      const result = await convertToMarkdown(filePath);
+      expect(result).toContain("Product");
+      expect(result).toContain("Apple");
+    } finally {
+      unlinkSync(filePath);
+    }
+  });
+
+  it("reads .ipynb file from path", async () => {
+    const nb = { cells: [{ cell_type: "code", source: ["x = 42\n"] }] };
+    const filePath = join(tmpDir, `test-${Date.now()}.ipynb`);
+    writeFileSync(filePath, JSON.stringify(nb), "utf-8");
+    try {
+      const result = await convertToMarkdown(filePath);
+      expect(result).toContain("x = 42");
+    } finally {
+      unlinkSync(filePath);
+    }
+  });
+
+  it("supports fileName option (Buffer + fileName)", async () => {
+    const csv = "A,B\n1,2";
+    const result = await convertToMarkdown(Buffer.from(csv, "utf-8"), {
+      fileName: "data.csv",
+    });
+    expect(result).toContain("A");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 21. convertJsonToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-import { convertJsonToMarkdown, convertYamlToMarkdown } from '../converters/data.ts';
-import { convertBatchToMarkdown } from '../index.ts';
+import {
+  convertJsonToMarkdown,
+  convertYamlToMarkdown,
+} from "../converters/data.ts";
+import { convertBatchToMarkdown } from "../index.ts";
 
-describe('convertJsonToMarkdown()', () => {
-  it('düz objeyi markdown tablosuna çevirir', () => {
-    const obj = { name: 'Furkan', age: 30 };
+describe("convertJsonToMarkdown()", () => {
+  it("converts flat object to markdown table", () => {
+    const obj = { name: "John", age: 30 };
     const result = convertJsonToMarkdown(Buffer.from(JSON.stringify(obj)));
-    expect(result).toContain('name');
-    expect(result).toContain('Furkan');
+    expect(result).toContain("name");
+    expect(result).toContain("John");
   });
 
-  it('array içeriğini listeler', () => {
+  it("lists array content", () => {
     const arr = [1, 2, 3];
     const result = convertJsonToMarkdown(Buffer.from(JSON.stringify(arr)));
-    expect(result).toContain('1');
-    expect(result).toContain('2');
+    expect(result).toContain("1");
+    expect(result).toContain("2");
   });
 
-  it('iç içe objeyi heading\'lerle çevirir', () => {
-    const obj = { section: { title: 'Hello', value: 42 } };
+  it("converts nested object with headings", () => {
+    const obj = { section: { title: "Hello", value: 42 } };
     const result = convertJsonToMarkdown(Buffer.from(JSON.stringify(obj)));
-    expect(result).toContain('section');
-    expect(result).toContain('title');
+    expect(result).toContain("section");
+    expect(result).toContain("title");
   });
 
-  it('geçersiz JSON için hata fırlatır', () => {
+  it("throws error for invalid JSON", () => {
     expect(() =>
-      convertJsonToMarkdown(Buffer.from('{not valid json'))
+      convertJsonToMarkdown(Buffer.from("{not valid json")),
     ).toThrow();
   });
 
-  it('# JSON Document başlığıyla başlar', () => {
+  it("starts with # JSON Document heading", () => {
     const result = convertJsonToMarkdown(Buffer.from('{"x":1}'));
-    expect(result).toContain('# JSON Document');
+    expect(result).toContain("# JSON Document");
   });
 
-  it('convertToMarkdown .json formatını işler', async () => {
-    const result = await convertToMarkdown(Buffer.from('{"hello":"world"}'), { forceExtension: '.json' });
-    expect(result).toContain('hello');
-    expect(result).toContain('world');
+  it("convertToMarkdown handles .json format", async () => {
+    const result = await convertToMarkdown(Buffer.from('{"hello":"world"}'), {
+      forceExtension: ".json",
+    });
+    expect(result).toContain("hello");
+    expect(result).toContain("world");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 22. convertYamlToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertYamlToMarkdown()', () => {
-  it('basit YAML key-value çevirir', () => {
-    const yaml = 'name: Furkan\ncity: Istanbul\n';
+describe("convertYamlToMarkdown()", () => {
+  it("converts simple YAML key-value", () => {
+    const yaml = "name: John\ncity: New York\n";
     const result = convertYamlToMarkdown(Buffer.from(yaml));
-    expect(result).toContain('name');
-    expect(result).toContain('Furkan');
+    expect(result).toContain("name");
+    expect(result).toContain("John");
   });
 
-  it('# YAML Document başlığıyla başlar', () => {
-    const result = convertYamlToMarkdown(Buffer.from('x: 1\n'));
-    expect(result).toContain('# YAML Document');
+  it("starts with # YAML Document heading", () => {
+    const result = convertYamlToMarkdown(Buffer.from("x: 1\n"));
+    expect(result).toContain("# YAML Document");
   });
 
-  it('liste içeren YAML çevirir', () => {
-    const yaml = 'items:\n  - apple\n  - banana\n';
+  it("converts YAML with list", () => {
+    const yaml = "items:\n  - apple\n  - banana\n";
     const result = convertYamlToMarkdown(Buffer.from(yaml));
-    expect(result).toContain('items');
+    expect(result).toContain("items");
   });
 
-  it('geçersiz YAML için hata fırlatır', () => {
-    const badYaml = 'key: :\n  - broken: [yaml';
-    expect(() =>
-      convertYamlToMarkdown(Buffer.from(badYaml))
-    ).toThrow();
+  it("throws error for invalid YAML", () => {
+    const badYaml = "key: :\n  - broken: [yaml";
+    expect(() => convertYamlToMarkdown(Buffer.from(badYaml))).toThrow();
   });
 
-  it('convertToMarkdown .yaml formatını işler', async () => {
-    const result = await convertToMarkdown(Buffer.from('greeting: hello\n'), { forceExtension: '.yaml' });
-    expect(result).toContain('greeting');
+  it("convertToMarkdown handles .yaml format", async () => {
+    const result = await convertToMarkdown(Buffer.from("greeting: hello\n"), {
+      forceExtension: ".yaml",
+    });
+    expect(result).toContain("greeting");
   });
 
-  it('convertToMarkdown .yml uzantısıyla çalışır', async () => {
-    const result = await convertToMarkdown(Buffer.from('key: value\n'), { forceExtension: '.yml' });
-    expect(result).toContain('key');
+  it("convertToMarkdown works with .yml extension", async () => {
+    const result = await convertToMarkdown(Buffer.from("key: value\n"), {
+      forceExtension: ".yml",
+    });
+    expect(result).toContain("key");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 23. convertBatchToMarkdown
+// 23. convertBatchToMarkdown7
 // ═══════════════════════════════════════════════════════════════════════════
-describe('convertBatchToMarkdown()', () => {
-  it('birden fazla girişi işler', async () => {
+describe("convertBatchToMarkdown()", () => {
+  it("processes multiple inputs", async () => {
     const results = await convertBatchToMarkdown([
-      { input: Buffer.from('<h1>Başlık</h1>'), options: { forceExtension: '.html' } },
-      { input: Buffer.from('A,B\n1,2'), options: { forceExtension: '.csv' } },
+      {
+        input: Buffer.from("<h1>Heading</h1>"),
+        options: { forceExtension: ".html" },
+      },
+      { input: Buffer.from("A,B\n1,2"), options: { forceExtension: ".csv" } },
     ]);
     expect(results).toHaveLength(2);
-    expect(results[0].result).toContain('Başlık');
-    expect(results[1].result).toContain('A');
+    expect(results[0].result).toContain("Heading");
+    expect(results[1].result).toContain("A");
   });
 
-  it('hata veren girişte error alanı döner', async () => {
+  it("returns error field for failing input", async () => {
     const results = await convertBatchToMarkdown([
-      { input: Buffer.from('geçersiz zip'), options: { forceExtension: '.zip' } },
+      {
+        input: Buffer.from("invalid zip"),
+        options: { forceExtension: ".zip" },
+      },
     ]);
     expect(results[0].error).toBeTruthy();
     expect(results[0].result).toBeUndefined();
   });
 
-  it('boş array için boş dizi döner', async () => {
+  it("returns empty array for empty array input", async () => {
     const results = await convertBatchToMarkdown([]);
     expect(results).toHaveLength(0);
   });
 
-  it('karışık başarılı/başarısız sonuçları işler', async () => {
+  it("processes mixed successful/failed results", async () => {
     const results = await convertBatchToMarkdown([
-      { input: Buffer.from('{"key":"val"}'), options: { forceExtension: '.json' } },
-      { input: Buffer.from('bozuk zip içeriği'), options: { forceExtension: '.zip' } },
+      {
+        input: Buffer.from('{"key":"val"}'),
+        options: { forceExtension: ".json" },
+      },
+      {
+        input: Buffer.from("corrupted zip content"),
+        options: { forceExtension: ".zip" },
+      },
     ]);
     expect(results).toHaveLength(2);
     expect(results[0].result).toBeTruthy();
     expect(results[1].error).toBeTruthy();
   });
 
-  it('inputId string path için dosya adını kullanır', async () => {
-    const tmpDir = join(process.cwd(), 'test-output-temp');
+  it("uses file path as inputId for string path input", async () => {
+    const tmpDir = join(process.cwd(), "test-output-temp");
     const filePath = join(tmpDir, `batch-test-${Date.now()}.html`);
-    writeFileSync(filePath, '<p>Batch test</p>', 'utf-8');
+    writeFileSync(filePath, "<p>Batch test</p>", "utf-8");
     try {
       const results = await convertBatchToMarkdown([{ input: filePath }]);
       expect(results[0].inputId).toBe(filePath);
@@ -1160,34 +1244,39 @@ describe('convertBatchToMarkdown()', () => {
     }
   });
 
-  it('Buffer input için inputId "buffer:0" olur', async () => {
+  it('inputId is "buffer:0" for Buffer input', async () => {
     const results = await convertBatchToMarkdown([
-      { input: Buffer.from('hello'), options: { forceExtension: '.txt' } },
+      { input: Buffer.from("hello"), options: { forceExtension: ".txt" } },
     ]);
-    expect(results[0].inputId).toBe('buffer:0');
+    expect(results[0].inputId).toBe("buffer:0");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 24. convertEpubToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-import { convertEpubToMarkdown } from '../converters/epub.ts';
+import { convertEpubToMarkdown } from "../converters/epub.ts";
 
-describe('convertEpubToMarkdown()', () => {
+describe("convertEpubToMarkdown()", () => {
   let epubBuffer: Buffer;
 
   beforeAll(async () => {
     // Build a minimal valid EPUB with AdmZip
     const zip = new AdmZip();
 
-    zip.addFile('mimetype', Buffer.from('application/epub+zip'));
-    zip.addFile('META-INF/container.xml', Buffer.from(
-      `<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+    zip.addFile("mimetype", Buffer.from("application/epub+zip"));
+    zip.addFile(
+      "META-INF/container.xml",
+      Buffer.from(
+        `<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
         <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
-      </container>`
-    ));
-    zip.addFile('OEBPS/content.opf', Buffer.from(
-      `<?xml version="1.0" encoding="utf-8"?>
+      </container>`,
+      ),
+    );
+    zip.addFile(
+      "OEBPS/content.opf",
+      Buffer.from(
+        `<?xml version="1.0" encoding="utf-8"?>
       <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
         <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
           <dc:title>Test Book</dc:title>
@@ -1197,45 +1286,51 @@ describe('convertEpubToMarkdown()', () => {
           <item id="ch1" href="chapter1.html" media-type="application/xhtml+xml"/>
         </manifest>
         <spine><itemref idref="ch1"/></spine>
-      </package>`
-    ));
-    zip.addFile('OEBPS/chapter1.html', Buffer.from(
-      '<html><body><h1>Chapter One</h1><p>Hello from EPUB.</p></body></html>'
-    ));
+      </package>`,
+      ),
+    );
+    zip.addFile(
+      "OEBPS/chapter1.html",
+      Buffer.from(
+        "<html><body><h1>Chapter One</h1><p>Hello from EPUB.</p></body></html>",
+      ),
+    );
 
     epubBuffer = zip.toBuffer();
   });
 
-  it('kitap başlığını çıkarır', async () => {
+  it("extracts book title", async () => {
     const out = await convertEpubToMarkdown(epubBuffer);
-    expect(out).toContain('Test Book');
+    expect(out).toContain("Test Book");
   });
 
-  it('yazar adını çıkarır', async () => {
+  it("extracts author name", async () => {
     const out = await convertEpubToMarkdown(epubBuffer);
-    expect(out).toContain('Test Author');
+    expect(out).toContain("Test Author");
   });
 
-  it('bölüm içeriğini markdown olarak çevirir', async () => {
+  it("converts chapter content to markdown", async () => {
     const out = await convertEpubToMarkdown(epubBuffer);
-    expect(out).toContain('Chapter One');
-    expect(out).toContain('Hello from EPUB');
+    expect(out).toContain("Chapter One");
+    expect(out).toContain("Hello from EPUB");
   });
 
-  it('string döndürür', async () => {
+  it("returns string", async () => {
     const out = await convertEpubToMarkdown(epubBuffer);
-    expect(typeof out).toBe('string');
+    expect(typeof out).toBe("string");
     expect(out.length).toBeGreaterThan(0);
   });
 
-  it('convertToMarkdown .epub formatını işler', async () => {
-    const out = await convertToMarkdown(epubBuffer, { forceExtension: '.epub' });
-    expect(out).toContain('Test Book');
+  it("convertToMarkdown handles .epub format", async () => {
+    const out = await convertToMarkdown(epubBuffer, {
+      forceExtension: ".epub",
+    });
+    expect(out).toContain("Test Book");
   });
 
-  it('geçersiz buffer için hata fırlatır', async () => {
+  it("throws error for invalid buffer", async () => {
     await expect(
-      convertEpubToMarkdown(Buffer.from('bu epub değil'))
+      convertEpubToMarkdown(Buffer.from("not an epub file")),
     ).rejects.toThrow();
   });
 });
@@ -1243,82 +1338,82 @@ describe('convertEpubToMarkdown()', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 25. convertMsgToMarkdown
 // ═══════════════════════════════════════════════════════════════════════════
-import { convertMsgToMarkdown } from '../converters/msg.ts';
+import { convertMsgToMarkdown } from "../converters/msg.ts";
 
 // Real fixture: msgreader's own test.msg (senderName="christoph@freiraum.xyz", subject="asdf")
 const MSG_FIXTURE_PATH = new URL(
-  '../../node_modules/msgreader/data/test.msg',
-  import.meta.url
+  "../../node_modules/msgreader/data/test.msg",
+  import.meta.url,
 ).pathname;
 
-describe('convertMsgToMarkdown()', () => {
-  it('gerçek MSG fixture\'ını okur ve gönderen adını içerir', () => {
+describe("convertMsgToMarkdown()", () => {
+  it("reads real MSG fixture and includes sender name", () => {
     const buf = readFileSync(MSG_FIXTURE_PATH);
     const out = convertMsgToMarkdown(buf);
-    expect(out).toContain('christoph@freiraum.xyz');
+    expect(out).toContain("christoph@freiraum.xyz");
   });
 
-  it('gerçek MSG fixture\'ından konu satırını çıkarır', () => {
+  it("extracts subject line from real MSG fixture", () => {
     const buf = readFileSync(MSG_FIXTURE_PATH);
     const out = convertMsgToMarkdown(buf);
-    expect(out).toContain('asdf');
+    expect(out).toContain("asdf");
   });
 
-  it('gerçek MSG fixture çıktısı "# Email Message" başlığı içerir', () => {
+  it('real MSG fixture output includes "# Email Message" heading', () => {
     const buf = readFileSync(MSG_FIXTURE_PATH);
     const out = convertMsgToMarkdown(buf);
     expect(out).toMatch(/^# Email Message/);
   });
 
-  it('gerçek MSG fixture çıktısı string döndürür', () => {
+  it("real MSG fixture output returns string", () => {
     const buf = readFileSync(MSG_FIXTURE_PATH);
     const out = convertMsgToMarkdown(buf);
-    expect(typeof out).toBe('string');
+    expect(typeof out).toBe("string");
     expect(out.length).toBeGreaterThan(10);
   });
 
-  it('geçersiz buffer için hata fırlatır veya string döner', () => {
+  it("throws error or returns string for invalid buffer", () => {
     // msgreader is tolerant — may return partial data rather than throw
     try {
-      const out = convertMsgToMarkdown(Buffer.from('bu msg değil'));
-      expect(typeof out).toBe('string');
+      const out = convertMsgToMarkdown(Buffer.from("not a msg file"));
+      expect(typeof out).toBe("string");
     } catch (e: any) {
       expect(e.message).toBeTruthy();
     }
   });
 
-  it('convertToMarkdown .msg formatını gerçek fixture ile işler', async () => {
+  it("convertToMarkdown handles .msg format with real fixture", async () => {
     const buf = readFileSync(MSG_FIXTURE_PATH);
-    const out = await convertToMarkdown(buf, { forceExtension: '.msg' });
-    expect(out).toContain('christoph@freiraum.xyz');
+    const out = await convertToMarkdown(buf, { forceExtension: ".msg" });
+    expect(out).toContain("christoph@freiraum.xyz");
   });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 26. convertCsvToMarkdown — multi-encoding (Shift-JIS)
 // ═══════════════════════════════════════════════════════════════════════════
-import iconv from 'iconv-lite';
+import iconv from "iconv-lite";
 
-describe('convertCsvToMarkdown() - multi-encoding', () => {
-  it('Shift-JIS / CP932 CSV Japonce karakterleri doğru decode eder', () => {
-    const csvText = '名前,年齢\n田中,25\n';
-    const shiftJisBuffer = iconv.encode(csvText, 'cp932');
+describe("convertCsvToMarkdown() - multi-encoding", () => {
+  it("correctly decodes Shift-JIS / CP932 CSV Japanese characters", () => {
+    const csvText = "名前,年齢\n田中,25\n";
+    const shiftJisBuffer = iconv.encode(csvText, "cp932");
     const out = convertCsvToMarkdown(shiftJisBuffer);
-    expect(out).toContain('名前');
-    expect(out).toContain('田中');
+    expect(out).toContain("名前");
+    expect(out).toContain("田中");
   });
 
-  it('UTF-8 BOM içeren CSV işler', () => {
+  it("handles CSV with UTF-8 BOM", () => {
     const bom = Buffer.from([0xef, 0xbb, 0xbf]);
-    const csv = Buffer.from('Col1,Col2\nA,B\n', 'utf-8');
+    const csv = Buffer.from("Col1,Col2\nA,B\n", "utf-8");
     const out = convertCsvToMarkdown(Buffer.concat([bom, csv]));
-    expect(out).toContain('Col1');
-    expect(out).toContain('A');
+    expect(out).toContain("Col1");
+    expect(out).toContain("A");
   });
 
-  it('normal UTF-8 CSV hâlâ çalışır', () => {
-    const out = convertCsvToMarkdown(Buffer.from('X,Y\n1,2\n', 'utf-8'));
-    expect(out).toContain('X');
-    expect(out).toContain('1');
+  it("regular UTF-8 CSV still works", () => {
+    const out = convertCsvToMarkdown(Buffer.from("X,Y\n1,2\n", "utf-8"));
+    expect(out).toContain("X");
+    expect(out).toContain("1");
   });
 });
