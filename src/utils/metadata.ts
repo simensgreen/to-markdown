@@ -1,140 +1,117 @@
-import type { DocumentFrontmatter, Section, TokenizerKind } from '../types/index.js';
+import yaml from 'js-yaml';
 import { countTokens } from './tokenizer.js';
+import type { TokenizerMode } from './tokenizer.js';
 
-const ANCHOR_BAD = /[^a-z0-9À-ɏ一-鿿\- ]+/gi;
+// ── Public types ──────────────────────────────────────────────────────────
 
-function slugify(text: string, used: Set<string>): string {
-  const base =
-    text
-      .toLowerCase()
-      .trim()
-      .replace(ANCHOR_BAD, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'section';
-  let slug = base;
-  let i = 2;
-  while (used.has(slug)) slug = `${base}-${i++}`;
-  used.add(slug);
-  return slug;
+export interface Section {
+  /** The heading text (without `#` prefix) */
+  heading: string;
+  /** ATX heading level 1–6 */
+  level: number;
+  /** Full text content of this section (including the heading line) */
+  content: string;
+  /** Breadcrumb: ancestor headings → this heading */
+  path: string[];
 }
 
+export interface Frontmatter {
+  title?: string;
+  sections: string[];
+  tokenCount: number;
+  chunkCount?: number;
+  generatedAt: string;
+  [key: string]: unknown;
+}
+
+// ── extractSections ───────────────────────────────────────────────────────
+
 /**
- * Walk a markdown document and extract heading-delimited sections, skipping
- * content inside fenced code blocks (so a `# foo` inside a code sample is not
- * mistaken for a heading).
+ * Parses a Markdown string into an array of sections, each defined by its
+ * heading.  Content before the first heading is ignored.
  */
 export function extractSections(markdown: string): Section[] {
-  const lines = markdown.split(/\r?\n/);
+  const lines = markdown.split('\n');
   const sections: Section[] = [];
-  const used = new Set<string>();
-  const headingStack: string[] = [];
 
-  let current: Section | null = null;
-  let inFence = false;
-  let buf: string[] = [];
+  let currentHeading: string | null = null;
+  let currentLevel = 0;
+  let currentLines: string[] = [];
+  let sectionPath: string[] = [];
 
-  const flush = () => {
-    if (current) {
-      current.content = buf.join('\n').trim();
-      sections.push(current);
-    }
-    buf = [];
+  const flush = (): void => {
+    if (currentHeading === null) return;
+    sections.push({
+      heading: currentHeading,
+      level: currentLevel,
+      content: currentLines.join('\n').trim(),
+      path: [...sectionPath],
+    });
+    currentLines = [];
   };
 
   for (const line of lines) {
-    if (/^```/.test(line)) inFence = !inFence;
-    if (inFence) {
-      if (current) buf.push(line);
-      continue;
-    }
-    const m = /^(#{1,6})\s+(.*\S)\s*$/.exec(line);
+    const m = line.match(/^(#{1,6})\s+(.+)/);
     if (m) {
       flush();
-      const level = m[1].length;
-      const heading = m[2];
-      headingStack.length = level - 1;
-      headingStack[level - 1] = heading;
-      current = {
-        heading,
-        level,
-        anchor: slugify(heading, used),
-        path: headingStack.slice(0, level),
-        content: '',
-      };
-      continue;
+      currentLevel = m[1].length;
+      currentHeading = m[2].trim();
+      const newPath = sectionPath.slice(0, currentLevel - 1);
+      newPath[currentLevel - 1] = currentHeading;
+      sectionPath = newPath.filter(Boolean);
+      currentLines = [line];
+    } else if (currentHeading !== null) {
+      currentLines.push(line);
     }
-    if (current) buf.push(line);
-    else buf.push(line);
   }
 
-  if (current) {
-    flush();
-  } else if (buf.length) {
-    // No headings at all — emit a single synthetic section so consumers always
-    // get at least one structural entry to attach metadata to.
-    sections.push({
-      heading: '',
-      level: 0,
-      anchor: 'document',
-      path: [],
-      content: buf.join('\n').trim(),
-    });
-  }
+  flush();
   return sections;
 }
 
-/**
- * Best-effort title extraction: first H1, then first non-empty line.
- */
-export function extractTitle(markdown: string): string | undefined {
-  const h1 = /^#\s+(.*\S)\s*$/m.exec(markdown);
-  if (h1) return h1[1];
-  const firstLine = markdown.split(/\r?\n/).find((l) => l.trim());
-  return firstLine?.trim().slice(0, 200) || undefined;
-}
+// ── buildFrontmatter ──────────────────────────────────────────────────────
 
 /**
- * Build a frontmatter object from a markdown document. Optional fields can be
- * preseeded by the caller (e.g. source, fileName) — fields supplied in
- * `seed` always win.
+ * Builds a frontmatter object from a Markdown string.
+ * Extracts the title from the first H1 and enumerates all section headings.
+ *
+ * @param seed - Extra key/value pairs merged into the output (last-write wins).
  */
 export async function buildFrontmatter(
   markdown: string,
-  seed: Partial<DocumentFrontmatter> = {},
-  tokenizer: TokenizerKind = 'approx'
-): Promise<DocumentFrontmatter> {
-  const charCount = markdown.length;
-  const wordCount = (markdown.match(/\S+/g) || []).length;
+  seed: Record<string, unknown> = {},
+  tokenizer: TokenizerMode = 'approx'
+): Promise<Frontmatter> {
+  const sections = extractSections(markdown);
   const tokenCount = await countTokens(markdown, tokenizer);
-  const title = seed.title ?? extractTitle(markdown);
+  const h1 = markdown.match(/^#\s+(.+)/m);
+  const title = h1 ? h1[1].trim() : undefined;
 
   return {
     title,
-    charCount,
-    wordCount,
+    sections: sections.map(s => s.heading),
     tokenCount,
+    generatedAt: new Date().toISOString(),
     ...seed,
   };
 }
 
-/**
- * Serialize frontmatter as YAML at the top of a markdown document.
- * Skips null/undefined values and arrays/objects (kept simple by design).
- */
-export function emitFrontmatter(fm: DocumentFrontmatter, markdown: string): string {
-  const lines: string[] = ['---'];
-  for (const [k, v] of Object.entries(fm)) {
-    if (v == null) continue;
-    if (typeof v === 'object') continue; // keep YAML one-level for now
-    const str = typeof v === 'string' ? quoteIfNeeded(v) : String(v);
-    lines.push(`${k}: ${str}`);
-  }
-  lines.push('---', '');
-  return lines.join('\n') + markdown;
-}
+// ── emitFrontmatter ───────────────────────────────────────────────────────
 
-function quoteIfNeeded(s: string): string {
-  if (/^[\w\-./@:+ ]+$/.test(s) && !/^[-?:,&*!|>'"%@`]/.test(s)) return s;
-  return JSON.stringify(s);
+/**
+ * Prepends YAML front matter to a Markdown string.
+ *
+ * ```
+ * ---
+ * title: "My Doc"
+ * ...
+ * ---
+ *
+ * # My Doc
+ * ...
+ * ```
+ */
+export function emitFrontmatter(fm: Frontmatter, markdown: string): string {
+  const fmYaml = yaml.dump(fm, { lineWidth: -1 });
+  return `---\n${fmYaml}---\n\n${markdown}`;
 }

@@ -1,20 +1,16 @@
 import sizeOf from 'image-size';
 import { parseBuffer } from 'music-metadata';
 import { formatMarkdown } from '../utils/markdown.js';
-import { ocrImage, resolveOcrOptions } from '../utils/ocr.js';
-import type { OCROptions } from '../types/index.js';
+import type { ImageMetadata, AudioMetadata, OCROptions } from '../types/index.js';
 
 /**
  * Converts image buffer to Markdown with metadata.
- *
- * Backward compatible: when called as `convertImageToMarkdown(buffer, ext)`
- * the output is unchanged (size + format metadata only).
- *
- * When `ocr` is provided and enabled, OCR text is appended below the metadata.
+ * Pass `ocr: true` (or an OCROptions object) to also extract text via Tesseract.js.
+ * Requires optional peer dep for OCR: npm install tesseract.js
  *
  * @param buffer - Image file buffer
- * @param ext - File extension
- * @param ocr - Optional OCR configuration (opt-in)
+ * @param ext    - File extension
+ * @param ocr    - OCR option (opt-in, default off)
  */
 export async function convertImageToMarkdown(
   buffer: Buffer,
@@ -34,16 +30,15 @@ export async function convertImageToMarkdown(
       md += `Format: ${dimensions.type}\n`;
     }
 
-    const ocrOpts = resolveOcrOptions(ocr);
-    if (ocrOpts) {
+    // OCR — opt-in only
+    if (ocr) {
       try {
-        const result = await ocrImage(buffer, ocrOpts);
-        const text = (result.text || '').trim();
-        if (text) {
-          md += `\n## Extracted Text (OCR)\n\n${text}\n`;
-        }
-      } catch (err: any) {
-        md += `\n<!-- OCR failed: ${err.message} -->\n`;
+        const { ocrImage } = await import('../utils/ocr.js');
+        const ocrOpts: OCROptions = typeof ocr === 'object' ? ocr : {};
+        const text = await ocrImage(buffer, ocrOpts);
+        if (text) md += `\n\n## Extracted Text\n\n${text}\n`;
+      } catch (ocrErr: any) {
+        md += `\n\n<!-- OCR failed: ${ocrErr.message} -->\n`;
       }
     }
 
