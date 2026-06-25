@@ -13,16 +13,29 @@ import { convertRssAtomToMarkdown } from './converters/xml.js';
 import { convertExcelToMarkdown, convertCsvToMarkdown } from './converters/spreadsheet.js';
 import { convertAudioToMarkdown, convertImageToMarkdown } from './converters/media.js';
 import { convertPptxToMarkdown, convertZipToMarkdown } from './converters/archive.js';
+import { convertJsonToMarkdown, convertYamlToMarkdown } from './converters/data.js';
+import { convertEpubToMarkdown } from './converters/epub.js';
+import { convertMsgToMarkdown } from './converters/msg.js';
 
 /**
  * Main function to convert various file formats to Markdown.
  *
- * Backward-compatible: signature and return type are unchanged from earlier
- * releases. New behavior is opt-in via `options.ocr`.
- *
- * @param input - File path (string), base64 data (string), or Buffer
+ * @param input   - File path (string), base64 data URL (string), or Buffer
  * @param options - Optional configuration for conversion
- * @returns Promise<string> - The converted markdown content
+ * @returns Converted Markdown content
+ *
+ * @example
+ * ```typescript
+ * // From file path
+ * const md = await convertToMarkdown('/path/to/document.docx');
+ *
+ * // From buffer
+ * const buf = fs.readFileSync('report.pdf');
+ * const md  = await convertToMarkdown(buf, { fileName: 'report.pdf' });
+ *
+ * // With OCR (opt-in, requires: npm install tesseract.js)
+ * const md = await convertToMarkdown('scan.pdf', { ocr: true });
+ * ```
  */
 export async function convertToMarkdown(
   input: ConverterInput,
@@ -74,6 +87,19 @@ export async function convertToMarkdown(
     case '.png':
     case '.gif':
       return await convertImageToMarkdown(buffer, ext, options.ocr);
+
+    case '.json':
+      return convertJsonToMarkdown(buffer);
+
+    case '.yaml':
+    case '.yml':
+      return convertYamlToMarkdown(buffer);
+
+    case '.epub':
+      return await convertEpubToMarkdown(buffer);
+
+    case '.msg':
+      return convertMsgToMarkdown(buffer);
 
     default:
       if (options.url && options.url.includes('youtube.com')) {
