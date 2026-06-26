@@ -461,21 +461,42 @@ describe("emitFrontmatter()", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// 6. ocrImage — throws informative error when deps are missing
+// 6. ocrImage — provider config validation
 // ─────────────────────────────────────────────────────────────────────────
 describe("ocrImage()", () => {
-  it("throws informative error if tesseract.js is not installed", async () => {
-    const dummyBuf = Buffer.from([0xff, 0xd8, 0xff]); // partial JPEG header
-    await expect(ocrImage(dummyBuf)).rejects.toThrow(/tesseract\.js/i);
+  it("throws when openai-vlm provider is missing vlm config", async () => {
+    const dummyBuf = Buffer.from([0xff, 0xd8, 0xff]);
+    await expect(
+      ocrImage(dummyBuf, { provider: 'openai-vlm' })
+    ).rejects.toThrow(/openai-vlm.*requires opts\.vlm/i);
   });
 
-  it("error message includes npm install instruction", async () => {
+  it("throws when anthropic-vlm provider is missing vlm config", async () => {
     const dummyBuf = Buffer.alloc(16);
-    try {
-      await ocrImage(dummyBuf);
-    } catch (err: any) {
-      expect(err.message).toMatch(/npm install/i);
-    }
+    await expect(
+      ocrImage(dummyBuf, { provider: 'anthropic-vlm' })
+    ).rejects.toThrow(/anthropic-vlm.*requires opts\.vlm/i);
+  });
+
+  it("throws when openai-vlm is missing model", async () => {
+    const dummyBuf = Buffer.alloc(16);
+    await expect(
+      ocrImage(dummyBuf, { provider: 'openai-vlm', vlm: { model: '', apiKey: 'key' } })
+    ).rejects.toThrow(/model is required/i);
+  });
+
+  it("throws when openai-vlm is missing apiKey", async () => {
+    const dummyBuf = Buffer.alloc(16);
+    await expect(
+      ocrImage(dummyBuf, { provider: 'openai-vlm', vlm: { model: 'gpt-4o' } })
+    ).rejects.toThrow(/apiKey is required/i);
+  });
+
+  it("throws when azure-vision is missing apiBase", async () => {
+    const dummyBuf = Buffer.alloc(16);
+    await expect(
+      ocrImage(dummyBuf, { provider: 'azure-vision', vlm: { model: 'vision', apiKey: 'key' } })
+    ).rejects.toThrow(/apiBase.*Azure endpoint/i);
   });
 });
 
