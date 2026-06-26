@@ -3,9 +3,6 @@ import type { OCROptions } from '../types/index.js';
 /**
  * Extracts text from an image buffer using Tesseract.js.
  *
- * Requires the optional peer dependency:
- *   npm install tesseract.js
- *
  * @param buffer - Image buffer (PNG, JPEG, etc.)
  * @param opts   - OCR options (language, etc.)
  */
@@ -18,7 +15,7 @@ export async function ocrImage(
   let createWorker: (lang: string) => Promise<any>;
   try {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore — optional peer dependency
+    // @ts-ignore
     const tesseract = await import('tesseract.js');
     createWorker = tesseract.createWorker;
   } catch {

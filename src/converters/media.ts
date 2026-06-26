@@ -1,4 +1,4 @@
-import sizeOf from 'image-size';
+import { imageSize as sizeOf } from 'image-size';
 import { parseBuffer } from 'music-metadata';
 import { formatMarkdown } from '../utils/markdown.js';
 import type { ImageMetadata, AudioMetadata, OCROptions } from '../types/index.js';
