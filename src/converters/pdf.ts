@@ -345,8 +345,8 @@ export async function convertPdfToMarkdown(
 
   // ── OCR integration (opt-in) ─────────────────────────────────────────────
   if (ocr) {
-    const ocrMode = typeof ocr === 'object' ? (ocr.pdfMode ?? 'auto') : 'auto';
-    const ocrLang = typeof ocr === 'object' ? ocr.lang : undefined;
+    const ocrOpts: OCROptions = typeof ocr === 'object' ? ocr : {};
+    const ocrMode = ocrOpts.pdfMode ?? 'auto';
     const shouldOcr =
       ocrMode === 'always' ||
       (ocrMode === 'auto' && !extractedText.trim());
@@ -360,7 +360,7 @@ export async function convertPdfToMarkdown(
         for (let p = 1; p <= pdf2.numPages; p++) {
           try {
             const png = await renderPdfPageToPng(buffer, p);
-            const text = await ocrImage(png, { lang: ocrLang ?? 'eng' });
+            const text = await ocrImage(png, ocrOpts);
             if (text) ocrTexts.push(text);
           } catch { /* skip unreadable pages */ }
         }

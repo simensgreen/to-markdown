@@ -2,6 +2,7 @@ import AdmZip from "adm-zip";
 import { Buffer } from "buffer";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
+import { fileURLToPath } from "url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { utils as xlsxUtils, write as xlsxWrite } from "xlsx";
 
@@ -1341,10 +1342,9 @@ describe("convertEpubToMarkdown()", () => {
 import { convertMsgToMarkdown } from "../converters/msg.ts";
 
 // Real fixture: msgreader's own test.msg (senderName="christoph@freiraum.xyz", subject="asdf")
-const MSG_FIXTURE_PATH = new URL(
-  "../../node_modules/msgreader/data/test.msg",
-  import.meta.url,
-).pathname;
+const MSG_FIXTURE_PATH = fileURLToPath(
+  new URL("../../node_modules/msgreader/data/test.msg", import.meta.url),
+);
 
 describe("convertMsgToMarkdown()", () => {
   it("reads real MSG fixture and includes sender name", () => {

@@ -21,6 +21,7 @@ export { extractSections, buildFrontmatter, emitFrontmatter } from './utils/meta
 export type { Section, Frontmatter } from './utils/metadata.js';
 
 export { ocrImage } from './utils/ocr.js';
+export type { OCRProvider, VLMOptions } from './types/index.js';
 
 /**
  * Main function to convert various file formats to Markdown

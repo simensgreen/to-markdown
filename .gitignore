@@ -1569,3 +1569,5 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 # End of https://www.toptal.com/developers/gitignore/api/node,macos,windows,linux,visualstudio,visualstudiocode,intellij,rider
+# Tesseract trained data files (large binary, not part of the distributed package)
+*.traineddata
