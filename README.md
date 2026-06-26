@@ -9,6 +9,7 @@ A versatile, TypeScript-first utility library for converting various file format
 ## ✨ Features
 
 - 🎯 **Multiple Format Support**: Convert PDF, DOCX, HTML, Excel, CSV, and more
+- 🔎 **OCR Support**: Extract text from scanned PDFs and images
 - 📦 **Simple API**: Easy to use with Promise-based interface
 - 🔧 **TypeScript First**: Written in TypeScript with full type definitions
 - 🚀 **Fast & Efficient**: Optimized for performance with modular architecture
@@ -29,6 +30,12 @@ yarn add @cognipeer/to-markdown
 
 # pnpm
 pnpm add @cognipeer/to-markdown
+```
+
+Optional OCR dependency (for default `tesseract` OCR provider):
+
+```bash
+npm install tesseract.js
 ```
 
 ## 🔧 Development
@@ -66,7 +73,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📝 Changelog
 
-### Version 2.0.0 (Latest)
+### Version 3.0.0 (Latest)
+
+- 🔎 Added OCR support for images and scanned PDFs
+- ⚙️ Added `ocr` option in `ConverterOptions` (`boolean | OCROptions`)
+- 🌐 Added OCR provider support: `tesseract`, `openai-vlm`, `anthropic-vlm`, `ollama-vlm`, `azure-vision`, `custom-vlm`
+- 🧠 Added PDF OCR modes: `auto`, `always`, `never`
+
+### Version 2.0.0
 
 - ✨ Rewritten in TypeScript with full type definitions
 - 🏗️ Modular architecture with separate converter modules
@@ -142,17 +156,22 @@ await saveToMarkdownFile(markdown, "converted-document", "./output");
 ### TypeScript Usage
 
 ```typescript
-import { 
-  convertToMarkdown, 
+import {
+  convertToMarkdown,
   saveToMarkdownFile,
   type ConverterOptions,
-  type ConverterInput 
+  type ConverterInput,
 } from "@cognipeer/to-markdown";
 
 // Type-safe conversion
 const options: ConverterOptions = {
   fileName: "document.pdf",
-  forceExtension: ".pdf"
+  forceExtension: ".pdf",
+  ocr: {
+    provider: "tesseract",
+    lang: "eng",
+    pdfMode: "auto",
+  },
 };
 
 const input: ConverterInput = "./document.pdf";
@@ -172,13 +191,41 @@ Converts various file formats to Markdown.
   - `fileName?: string` - Name of the file (helpful for buffer inputs)
   - `forceExtension?: string` - Force a specific file extension for processing
   - `url?: string` - Original URL (used for web content like YouTube or Bing search)
+  - `ocr?: boolean | OCROptions` - Enable OCR for images and scanned PDFs (opt-in)
+
+`OCROptions` includes:
+
+- `provider?: 'tesseract' | 'openai-vlm' | 'anthropic-vlm' | 'ollama-vlm' | 'azure-vision' | 'custom-vlm'`
+- `lang?: string` - Tesseract language code (default: `eng`)
+- `pdfMode?: 'auto' | 'always' | 'never'` - PDF OCR mode (default: `auto`)
+- `vlm?: { model: string; apiKey?: string; apiBase?: string; prompt?: string; maxTokens?: number }`
 
 **Returns:** `Promise<string>` - The converted markdown content
 
 **Example:**
+
 ```typescript
 const markdown = await convertToMarkdown("./document.pdf", {
-  forceExtension: ".pdf"
+  forceExtension: ".pdf",
+});
+```
+
+### OCR Examples
+
+```typescript
+// 1) OCR scanned PDF with default provider (tesseract)
+const scannedPdf = await convertToMarkdown("./scan.pdf", {
+  ocr: true,
+});
+
+// 2) OCR image with explicit tesseract options
+const imageText = await convertToMarkdown("./receipt.png", {
+  ocr: { provider: "tesseract", lang: "eng" },
+});
+
+// 3) OCR PDF only when native text extraction is empty
+const autoFallback = await convertToMarkdown("./document.pdf", {
+  ocr: { pdfMode: "auto" },
 });
 ```
 
@@ -197,6 +244,7 @@ Saves the markdown content to a file.
 **Returns:** `Promise<string>` - Path to the saved file
 
 **Example:**
+
 ```typescript
 const filePath = await saveToMarkdownFile(markdown, "document", "./output");
 console.log(`Saved to: ${filePath}`);
@@ -251,6 +299,7 @@ to-markdown/
 ├── dist/                # Compiled output
 └── package.json
 ```
+
 - **Web content**: Special handling for YouTube videos and Bing search results
 
 ## Examples
@@ -300,7 +349,7 @@ const markdown = await convertToMarkdown("/path/to/document.pdf");
 const savedPath = await saveToMarkdownFile(
   markdown,
   "converted-document",
-  "./output"
+  "./output",
 );
 console.log(`Saved to: ${savedPath}`);
 ```
