@@ -358,11 +358,12 @@ export async function convertPdfToMarkdown(
         const pdf2 = await getDocumentProxy(new Uint8Array(buffer));
         const ocrTexts: string[] = [];
         for (let p = 1; p <= pdf2.numPages; p++) {
+          let png: Buffer;
           try {
-            const png = await renderPdfPageToPng(buffer, p);
-            const text = await ocrImage(png, ocrOpts);
-            if (text) ocrTexts.push(text);
-          } catch { /* skip unreadable pages */ }
+            png = await renderPdfPageToPng(buffer, p);
+          } catch { /* skip unrenderable pages */ continue; }
+          const text = await ocrImage(png, ocrOpts); // API errors propagate to outer catch
+          if (text) ocrTexts.push(text);
         }
         if (ocrTexts.length > 0) return ocrTexts.join('\n\n');
       } catch (err: any) {

@@ -89,7 +89,7 @@ async function ocrWithOpenAI(buffer: Buffer, vlm: VLMOptions): Promise<string> {
     },
     body: JSON.stringify({
       model: vlm.model,
-      max_tokens: vlm.maxTokens ?? 4096,
+      max_completion_tokens: vlm.maxTokens ?? 4096,
       messages: [
         {
           role: 'user',
