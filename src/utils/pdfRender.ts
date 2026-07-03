@@ -1,38 +1,31 @@
 /**
  * Renders a single PDF page to a PNG buffer.
  *
- * Requires optional peer dependencies:
- *   npm install pdfjs-dist
- *   npm install @napi-rs/canvas   (or)   npm install canvas
+ * Uses unpdf (bundled dependency) so it is not affected by the host
+ * application's pdfjs-dist version.
+ *
+ * Requires optional peer dependency for Node.js canvas rendering:
+ *   npm install canvas   (or)   npm install @napi-rs/canvas
  */
 export async function renderPdfPageToPng(
   buffer: Buffer,
   pageNum: number = 1,
   scale: number = 2.0
 ): Promise<Buffer> {
-  // 1. Load pdfjs-dist
-  let pdfjsLib: any;
-  try {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore — optional peer dependency
-    pdfjsLib = await import('pdfjs-dist');
-  } catch {
-    throw new Error(
-      'PDF rendering requires pdfjs-dist: npm install pdfjs-dist'
-    );
-  }
+  // unpdf ships its own bundled pdfjs — not affected by host's pdfjs-dist version
+  const { renderPageAsImage } = await import('unpdf');
 
-  // 2. Load a canvas implementation (canvas preferred over @napi-rs/canvas for pdfjs compat)
-  let createCanvas: (w: number, h: number) => any;
+  // Resolve canvas implementation: prefer `canvas`, fall back to `@napi-rs/canvas`
+  let canvasImport: (() => Promise<any>) | undefined;
   try {
-    // @ts-ignore — optional peer dependency
-    const m = await import('canvas');
-    createCanvas = m.createCanvas ?? m.default?.createCanvas;
+    await import('canvas');
+    canvasImport = () => import('canvas');
   } catch {
     try {
       // @ts-ignore — optional peer dependency
-      const m = await import('@napi-rs/canvas');
-      createCanvas = m.createCanvas ?? m.default?.createCanvas;
+      await import('@napi-rs/canvas');
+      // @ts-ignore — optional peer dependency
+      canvasImport = () => import('@napi-rs/canvas');
     } catch {
       throw new Error(
         'PDF rendering requires a canvas library: npm install canvas'
@@ -40,42 +33,12 @@ export async function renderPdfPageToPng(
     }
   }
 
-  // 3. Build a CanvasFactory for pdfjs-dist v4+ compatibility
-  // pdfjs-dist v4 requires a CanvasFactory when rendering pages with images
-  class NodeCanvasFactory {
-    create(width: number, height: number) {
-      const canvas = createCanvas(width, height);
-      const context = canvas.getContext('2d');
-      return { canvas, context };
-    }
-    reset(canvasAndContext: any, width: number, height: number) {
-      canvasAndContext.canvas.width = width;
-      canvasAndContext.canvas.height = height;
-    }
-    destroy(canvasAndContext: any) {
-      canvasAndContext.canvas.width = 0;
-      canvasAndContext.canvas.height = 0;
-    }
-  }
-
-  const documentParams: any = { data: new Uint8Array(buffer) };
-  // pdfjs v4 requires a CanvasFactory instance (lowercase key)
-  try {
-    documentParams.canvasFactory = new NodeCanvasFactory();
-  } catch {
-    // ignore — older pdfjs versions don't support this option
-  }
-
-  const pdf = await pdfjsLib.getDocument(documentParams).promise;
-  const page = await pdf.getPage(pageNum);
-  const viewport = page.getViewport({ scale });
-
-  const canvas = createCanvas(
-    Math.ceil(viewport.width),
-    Math.ceil(viewport.height)
+  // renderPageAsImage returns ArrayBuffer; convert to Buffer for Node.js consumers
+  const result = await renderPageAsImage(
+    new Uint8Array(buffer),
+    pageNum,
+    { canvas: canvasImport, scale }
   );
-  const context = canvas.getContext('2d');
-  await page.render({ canvasContext: context, viewport }).promise;
 
-  return canvas.toBuffer('image/png');
+  return Buffer.from(result);
 }
