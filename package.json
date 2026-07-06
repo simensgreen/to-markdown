@@ -60,9 +60,9 @@
   },
   "homepage": "https://cognipeer.github.io/to-markdown",
   "dependencies": {
-    "unpdf": "^0.12.1",
     "@types/js-yaml": "^4.0.9",
     "adm-zip": "^0.5.16",
+    "canvas": "^3.2.3",
     "cheerio": "^1.0.0",
     "file-type": "^16.5.4",
     "iconv-lite": "^0.7.2",
@@ -76,6 +76,7 @@
     "sharp": "^0.34.5",
     "tesseract.js": "^5.0.0",
     "turndown": "^7.2.0",
+    "unpdf": "^0.12.1",
     "xlsx": "^0.18.5",
     "xml2js": "^0.6.2"
   },
