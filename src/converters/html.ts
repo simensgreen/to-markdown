@@ -32,20 +32,27 @@ export function convertHtmlToMarkdown(input: Buffer | string): string {
   }
 }
 
+// Elements that legitimately have no text content and must survive the
+// empty-element cleanup below (or whose removal would corrupt structure,
+// e.g. dropping an empty <td> shifts every following table column).
+const EMPTY_KEEP_SELECTOR =
+  'img, br, hr, input, iframe, svg, video, audio, source, track, embed, ' +
+  'object, canvas, picture, td, th, tr, table, thead, tbody, tfoot, colgroup, col';
+
 /**
  * Converts HTML string to Markdown using Turndown
  * @param htmlString - HTML content string
  * @returns Markdown string
  */
 export function htmlToMarkdown(htmlString: string): string {
-  const $ = load(htmlString, {
-    xml: {
-      normalizeWhitespace: true,
-    },
-  } as any);
+  // NOTE: parse in standard HTML mode. The previous `xml.normalizeWhitespace`
+  // parse collapsed the newlines inside <pre> blocks (destroying code
+  // formatting) and mis-parsed void elements like <img>.
+  const $ = load(htmlString);
 
-  // Remove script and style tags
-  $('script, style').remove();
+  // Remove non-content elements. <head> in particular: its <title> text used
+  // to leak into the markdown body as a stray first line.
+  $('head, script, style, noscript, template').remove();
 
   // Remove navigation/sidebar elements (Wikipedia, MediaWiki, generic nav).
   // Use `body > header` and `body > footer` (not bare `header`/`footer`) so that
@@ -56,12 +63,16 @@ export function htmlToMarkdown(htmlString: string): string {
     '[role="banner"], [role="contentinfo"], ' +
     'body > header, body > footer').remove();
 
-  // Remove empty elements
+  // Remove empty elements (layout divs/spans with no content), but keep
+  // void/media/table elements and anything that contains one — removing a
+  // wrapper <div> that only holds an <img> would drop the image.
   $('*').each(function () {
     const element = $(this);
-    if (element.text().trim() === '') {
-      element.remove();
-    }
+    if (element.is(EMPTY_KEEP_SELECTOR)) return;
+    if (element.parents('pre').length > 0) return;
+    if (element.text().trim() !== '') return;
+    if (element.find(EMPTY_KEEP_SELECTOR).length > 0) return;
+    element.remove();
   });
 
   const turndownOptions: TurndownOptions = {
@@ -73,27 +84,13 @@ export function htmlToMarkdown(htmlString: string): string {
     keepHeaderLevels: true,
   };
 
+  // Turndown's built-in rules handle headings, ordered/unordered lists
+  // (numbering + nested indentation) and fenced code correctly — the custom
+  // heading/listItem rules that used to live here flattened every <ol>/<ul>
+  // into top-level `* ` bullets, so they were removed on purpose.
   const turndownService = new TurndownService(turndownOptions as any);
 
-  // Custom rule for headings
-  turndownService.addRule('heading', {
-    filter: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
-    replacement: function (content, node: any) {
-      const level = Number(node.nodeName.charAt(1));
-      return '\n' + '#'.repeat(level) + ' ' + content + '\n\n';
-    },
-  });
-
-  // Custom rule for list items
-  turndownService.addRule('listItem', {
-    filter: 'li',
-    replacement: function (content) {
-      content = content.trim();
-      return '* ' + content + '\n';
-    },
-  });
-
-  // Custom rule for tables
+  // Custom rule for tables (turndown core has no table support).
   turndownService.addRule('tableConversion', {
     filter: 'table',
     replacement: function (content, node: any) {
@@ -105,19 +102,20 @@ export function htmlToMarkdown(htmlString: string): string {
         return '';
       }
 
+      // Cell text may contain newlines/indentation from the source HTML —
+      // collapse it so a multi-line cell can't break the row line.
+      const cellText = (cell: any) =>
+        cell.textContent.replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|');
+
       const firstRowCells = trs[0].querySelectorAll('th,td');
-      const headers = Array.from(firstRowCells).map((cell: any) =>
-        cell.textContent.trim().replace(/\|/g, '\\|')
-      );
+      const headers = Array.from(firstRowCells).map(cellText);
       header = '| ' + headers.join(' | ') + ' |';
 
       const underline = '| ' + headers.map(() => '---').join(' | ') + ' |';
 
       for (let i = 1; i < trs.length; i++) {
         const rowCells = trs[i].querySelectorAll('th,td');
-        const rowValues = Array.from(rowCells).map((cell: any) =>
-          cell.textContent.trim().replace(/\|/g, '\\|')
-        );
+        const rowValues = Array.from(rowCells).map(cellText);
         const rowText = '| ' + rowValues.join(' | ') + ' |';
         rows.push(rowText);
       }
@@ -128,15 +126,13 @@ export function htmlToMarkdown(htmlString: string): string {
     },
   });
 
-  let markdown = turndownService.turndown($.html());
-  markdown = markdown
+  // Gentle whitespace normalization only. The previous pipeline here
+  // (`split('\n').map(trim).filter(Boolean).join('\n\n')`) destroyed all
+  // multi-line structures: table rows and code lines ended up merged /
+  // blank-line separated, producing invalid markdown.
+  return turndownService
+    .turndown($.html())
+    .replace(/[^\S\n]+$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
-    .replace(/^\s+|\s+$/g, '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line)
-    .join('\n\n')
     .trim();
-
-  return markdown;
 }
